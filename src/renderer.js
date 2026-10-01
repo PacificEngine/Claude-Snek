@@ -1,15 +1,20 @@
 import { GRID_SIZE } from './core/config.js';
+import { emptyHazards, isSolid, isGhostVisible, wallOpacity } from './core/hazards.js';
 
 const SNAKE_COLOR = '#1f7a5c';
 const HEAD_COLOR = '#14573f';
 const FOOD_COLOR = '#c2410c';
 const GRID_COLOR = '#eef1f4';
+const WALL_COLOR = '#334155';
+const BOMB_COLOR = '#111827';
+const SPARK_COLOR = '#f59e0b';
+const ENEMY_COLOR = '#7e22ce';
+const ENEMY_HEAD_COLOR = '#581c87';
+const DEAD_COLOR = '#9ca3af';
+const GHOST_STROKE = '#475569';
+const GHOST_FILL = 'rgba(100, 116, 139, 0.18)';
 
-export function render(ctx, state) {
-  const size = ctx.canvas.width / GRID_SIZE;
-  const pad = size * 0.08;
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-
+function drawGrid(ctx, size) {
   ctx.strokeStyle = GRID_COLOR;
   ctx.lineWidth = 1;
   for (let i = 1; i < GRID_SIZE; i++) {
@@ -18,11 +23,112 @@ export function render(ctx, state) {
     ctx.moveTo(0, i * size); ctx.lineTo(ctx.canvas.width, i * size);
     ctx.stroke();
   }
+}
+
+function square(ctx, cell, size, pad) {
+  ctx.beginPath();
+  ctx.roundRect(cell.x * size + pad, cell.y * size + pad, size - pad * 2, size - pad * 2, size * 0.25);
+}
+
+function drawGhost(ctx, cells, age, size, pad, reducedMotion, stroke = GHOST_STROKE) {
+  if (!isGhostVisible(age, reducedMotion)) return;
+  ctx.save();
+  ctx.setLineDash([size * 0.18, size * 0.12]);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = stroke;
+  ctx.fillStyle = GHOST_FILL;
+  cells.forEach((cell) => {
+    square(ctx, cell, size, pad);
+    ctx.fill();
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
+function drawWalls(ctx, state, size, pad, reducedMotion) {
+  state.hazards.walls.forEach((wall) => {
+    if (!isSolid(wall, state.snake)) {
+      drawGhost(ctx, wall.cells, wall.age, size, pad, reducedMotion);
+      return;
+    }
+    const opacity = wallOpacity(wall);
+    if (opacity <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    ctx.fillStyle = WALL_COLOR;
+    wall.cells.forEach((cell) => {
+      ctx.beginPath();
+      ctx.rect(cell.x * size + pad / 2, cell.y * size + pad / 2, size - pad, size - pad);
+      ctx.fill();
+    });
+    ctx.restore();
+  });
+}
+
+function drawBomb(ctx, state, size, pad, reducedMotion) {
+  const bomb = state.hazards.bomb;
+  if (!bomb) return;
+  if (!isSolid(bomb, state.snake)) {
+    drawGhost(ctx, bomb.cells, bomb.age, size, pad, reducedMotion);
+    return;
+  }
+  const { x, y } = bomb.cells[0];
+  const cx = (x + 0.5) * size;
+  const cy = (y + 0.5) * size;
+  const r = size * 0.42;
+  ctx.fillStyle = BOMB_COLOR;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx + r, cy);
+  ctx.lineTo(cx, cy + r);
+  ctx.lineTo(cx - r, cy);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = SPARK_COLOR;
+  ctx.beginPath();
+  ctx.arc(cx + r * 0.45, cy - r * 0.45, size * 0.1, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawEnemy(ctx, state, size, pad, reducedMotion) {
+  const enemy = state.hazards.enemy;
+  if (!enemy) return;
+  if (enemy.status === 'ghost') {
+    drawGhost(ctx, enemy.cells, enemy.age, size, pad, reducedMotion, ENEMY_COLOR);
+    return;
+  }
+  enemy.cells.forEach((cell, i) => {
+    ctx.fillStyle = enemy.status === 'dead' ? DEAD_COLOR : i === 0 ? ENEMY_HEAD_COLOR : ENEMY_COLOR;
+    square(ctx, cell, size, pad);
+    ctx.fill();
+    if (enemy.status === 'dead') {
+      ctx.strokeStyle = '#374151';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cell.x * size + size * 0.3, cell.y * size + size * 0.3);
+      ctx.lineTo(cell.x * size + size * 0.7, cell.y * size + size * 0.7);
+      ctx.moveTo(cell.x * size + size * 0.7, cell.y * size + size * 0.3);
+      ctx.lineTo(cell.x * size + size * 0.3, cell.y * size + size * 0.7);
+      ctx.stroke();
+    }
+  });
+}
+
+export function render(ctx, state, options = {}) {
+  const reducedMotion = options.reducedMotion ?? false;
+  const size = ctx.canvas.width / GRID_SIZE;
+  const pad = size * 0.08;
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  drawGrid(ctx, size);
+
+  const view = { ...state, hazards: state.hazards ?? emptyHazards() };
+  drawWalls(ctx, view, size, pad, reducedMotion);
+  drawBomb(ctx, view, size, pad, reducedMotion);
+  drawEnemy(ctx, view, size, pad, reducedMotion);
 
   state.snake.forEach((cell, i) => {
     ctx.fillStyle = i === 0 ? HEAD_COLOR : SNAKE_COLOR;
-    ctx.beginPath();
-    ctx.roundRect(cell.x * size + pad, cell.y * size + pad, size - pad * 2, size - pad * 2, size * 0.25);
+    square(ctx, cell, size, pad);
     ctx.fill();
   });
 

@@ -207,3 +207,21 @@ describe('tiered layers', () => {
     expect(log.noiseStarts).toEqual([0]);
   });
 });
+
+describe('unlock', () => {
+  it('is a safe no-op before start and with no Web Audio', () => {
+    expect(() => createSynth(null).unlock()).not.toThrow();
+    const { FakeAudioContext } = makeFakeContextClass();
+    expect(() => createSynth(FakeAudioContext).unlock()).not.toThrow();
+  });
+
+  it('asks a started context to resume again', () => {
+    const { FakeAudioContext, log } = makeFakeContextClass();
+    const synth = createSynth(FakeAudioContext);
+    synth.start();
+    let resumed = 0;
+    log.contexts[0].resume = () => { resumed += 1; return Promise.resolve(); };
+    synth.unlock();
+    expect(resumed).toBe(1);
+  });
+});

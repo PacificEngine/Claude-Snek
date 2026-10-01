@@ -11,3 +11,14 @@ export function actionForKey(key) {
   if (k === 'm') return { type: 'mute' };
   return null;
 }
+
+const BUTTON_DIRECTIONS = ['up', 'down', 'left', 'right'];
+const BUTTON_ACTIONS = ['pause', 'restart', 'mute'];
+
+// Maps a touch button's data attributes to the same actions the keyboard produces.
+export function actionForButton({ action, direction } = {}) {
+  if (action === 'direction') {
+    return BUTTON_DIRECTIONS.includes(direction) ? { type: 'direction', direction } : null;
+  }
+  return BUTTON_ACTIONS.includes(action) ? { type: action } : null;
+}

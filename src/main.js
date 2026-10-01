@@ -2,7 +2,7 @@ import { createState, queueDirection, tick, togglePause } from './core/game.js';
 import { bpm, musicTier } from './core/pacing.js';
 import { createTierGate } from './core/tier-gate.js';
 import { loadHighScore, saveHighScore } from './storage.js';
-import { actionForKey } from './input.js';
+import { actionForKey, actionForButton } from './input.js';
 import { createSynth } from './synth.js';
 import { createConductor } from './conductor.js';
 import { render } from './renderer.js';
@@ -39,13 +39,15 @@ function updateHud() {
   scoreEl.textContent = String(state.score);
   bestEl.textContent = String(best);
   muteBtn.setAttribute('aria-pressed', String(synth.isMuted()));
-  if (state.status === 'gameOver') messageEl.textContent = 'Game over — press Enter to restart';
-  else if (state.status === 'paused') messageEl.textContent = 'Paused — press P to resume';
-  else messageEl.textContent = started ? '' : 'Press an arrow key or WASD to start';
+  if (state.status === 'gameOver') messageEl.textContent = 'Game over — press Enter or tap Restart';
+  else if (state.status === 'paused') messageEl.textContent = 'Paused — press P or tap Pause to resume';
+  else messageEl.textContent = started ? '' : 'Press an arrow key or WASD, or tap a direction, to start';
 }
 
+const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+
 function draw() {
-  render(ctx, state);
+  render(ctx, state, { reducedMotion: reducedMotionQuery.matches });
   updateHud();
 }
 
@@ -77,14 +79,8 @@ function toggleMute() {
   updateHud();
 }
 
-document.addEventListener('keydown', (event) => {
-  if (typeof event.key !== 'string') return;
-  if (event.ctrlKey || event.metaKey || event.altKey) return;
-  const action = actionForKey(event.key);
+function dispatch(action) {
   if (!action) return;
-  if (event.repeat && action.type !== 'direction') return;
-  event.preventDefault();
-
   if (action.type === 'direction') {
     state = queueDirection(state, action.direction);
     if (!started) {
@@ -103,8 +99,34 @@ document.addEventListener('keydown', (event) => {
   } else if (action.type === 'mute') {
     toggleMute();
   }
+}
+
+document.addEventListener('keydown', (event) => {
+  if (typeof event.key !== 'string') return;
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  const action = actionForKey(event.key);
+  if (!action) return;
+  if (event.repeat && action.type !== 'direction') return;
+  event.preventDefault();
+  synth.unlock();
+  dispatch(action);
 });
 
-muteBtn.addEventListener('click', toggleMute);
+// On-screen buttons: respond on pointerdown (no tap delay); a keyboard- or
+// assistive-tech-generated click (detail 0) also works. Real clicks are ignored
+// here because pointerdown already handled them.
+function onButton(event) {
+  if (event.type === 'pointerdown' && (event.button !== 0 || !event.isPrimary)) return;
+  const button = event.target.closest?.('button[data-action]');
+  if (!button) return;
+  event.preventDefault();
+  synth.unlock();
+  dispatch(actionForButton(button.dataset));
+}
+document.addEventListener('pointerdown', onButton);
+document.addEventListener('click', (event) => {
+  if (event.detail === 0) onButton(event);
+});
+document.addEventListener('pointerup', () => synth.unlock());
 
 draw();

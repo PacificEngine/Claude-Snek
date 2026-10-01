@@ -12,7 +12,7 @@ A single-player, browser-based Snake-style game. It's a personal learning projec
 - The snake moves continuously and turns with arrow keys or WASD. A 180° reversal is ignored.
 - Eating food grows the snake by one cell and raises the score.
 - Food spawns on a random empty cell, never on the snake.
-- The game ends when the snake hits a wall or itself.
+- The game ends when the snake hits the arena edge, itself, or a solid hazard (walls, bomb, enemy snake; see `./hazards.md`).
 - A restart is available after game over.
 - Game speed and music tempo increase once for every 4 apples eaten (not on every apple): BPM rises 4 per 4 apples, from 120 to 200 at the 80th apple.
 - The snake advances exactly one cell per sixteenth note of the music (rhythm-game feel): the music and the game share one beat clock, so every step lands on the beat grid.
@@ -32,6 +32,8 @@ A single-player, browser-based Snake-style game. It's a personal learning projec
 - A tier change takes effect at the next bar line so a new layer enters on a downbeat. Restarting after game over resets to tier 0 and 0 apples.
 - Pausing stops the music and the snake; resuming continues on the next step. Game over stops the music; restart begins the track again from bar 1.
 - A mute/unmute toggle for the music.
+- On-screen buttons make the game fully playable on touch devices as well as with the keyboard: a four-way D-pad (up, down, left, right), a Pause button, a Restart button, and the existing Mute button. Each button triggers exactly the same game action as its key through one shared action path.
+- The first tap on any button counts as the first interaction, so music can start from touch alone.
 - Music starts only after the first user interaction.
 - Muting silences the music without changing game speed or the beat grid.
 
@@ -39,7 +41,7 @@ A single-player, browser-based Snake-style game. It's a personal learning projec
 - No backend, accounts or network requests.
 - No multiplayer.
 - No external audio files; all sound is synthesized.
-- No mobile or touch controls in v1.
+- No swipe or other gesture controls in v1 (on-screen buttons only).
 - No autoplaying audio before user interaction.
 - No `innerHTML` or `eval`.
 
@@ -67,7 +69,7 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
 - Optional dev debug overlay (FPS, tick rate).
 
 ## Security
-- **Attack surface:** Keyboard input only.
+- **Attack surface:** Keyboard and on-screen button (pointer) input only.
 - **Data:** No PII or credentials. The only stored value is the high score, which is validated as a finite non-negative number on read.
 - **Auth:** None.
 - **Compliance:** None required. Basic OWASP hygiene applies, and the page includes a restrictive Content-Security-Policy.
@@ -75,23 +77,25 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
 ## Performance & Scalability
 - Redraw on every game tick (nothing animates between ticks). Steps per second = BPM ÷ 15: 8/sec at 120 BPM rising to 13.3/sec at 200 BPM (the tempo steps up once per 4 apples, 20 steps in all).
 - Audio events are scheduled ahead on the audio clock so notes and snake steps do not drift apart; throttled background tabs must not cause bursts of notes.
-- Input latency under one tick, with no dropped keypresses (a direction queue handles two quick presses).
+- Input latency under one tick, with no dropped keypresses or taps (a direction queue handles two quick presses). Buttons respond on `pointerdown`, so there is no tap delay.
 - Performance is checked manually in the browser. There's no load testing.
 - Scaling and growth don't apply: it's single-player and client-side, and the 20×20 grid keeps the work per frame bounded.
 
 ## UX/UI
 - Clean, modern look: flat colors and rounded cells.
 - 20×20 grid.
-- Keyboard-only play.
+- Playable with the keyboard or the on-screen buttons.
+- Touch layout: buttons are at least 48 px square, the D-pad sits below the board, the board scales to fit narrow screens (down to 320 px wide) without page scrolling, and double-tap zoom and text selection are suppressed on the controls (`touch-action: manipulation`).
+- Buttons have accessible names (`aria-label`) and a visible pressed state.
 - Sufficient color contrast.
 - Food differs from the snake by shape, not color alone.
-- Respects `prefers-reduced-motion`.
+- Respects `prefers-reduced-motion`: nothing animates between steps; obstacle ghosts flash at most about 1.7 times per second (under the 3 per second limit) and become steady outlines under reduced motion (see `./hazards.md`).
 
 ## Architecture
 - **Core (pure):** `tick(state, rng) → state`, with input applied via `queueDirection(state, dir)`. No DOM or audio access.
 - **Adapters:**
   - renderer (canvas)
-  - input (keys → directions)
+  - input (keys and on-screen buttons → one shared set of actions)
   - audio (synthesized music: schedules the track's events for each step on the audio clock)
   - storage (high score)
 - **Beat clock (pure + adapter):** a conductor counts sixteenth-note steps and gives each step's time. Both the game step and the music events for step *n* are scheduled at that step's time. With no Web Audio it runs from a timer instead.
@@ -111,8 +115,10 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
   - track lookup: which events fire on step *n* at each tier, layers appearing in the tier order above, kick on quarters, wraparound after 512 steps
   - tier changes deferred to the next bar line
   - high-score validation
+  - button-to-action mapping (each button yields the same action as its key)
+  - hazards: see `./hazards.md`
 - **Adapter tests:** Light tests with fakes, including the silent fallback when Web Audio is missing.
-- **Manual only:** Canvas rendering, actual sound, and game feel.
+- **Manual only:** Canvas rendering, actual sound, game feel, and touch behavior on a real phone or emulated touch device (tap targets, no zoom or scroll, music starts on first tap).
 - **E2E:** None in v1.
 
 ## Data Model
@@ -120,7 +126,7 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
 - Snake is an ordered array of cells, head first.
 - Direction is `up`, `down`, `left` or `right`, plus a queued next direction.
 - Food is a single cell.
-- State is `{snake, direction, food, score, status}`, with status `playing`, `paused` or `gameOver`.
+- State is `{snake, direction, food, score, status, hazards}`, with status `playing`, `paused` or `gameOver`; `hazards` is described in `./hazards.md`.
 - Stored: only `highScore` in localStorage.
 - Derived: apples eaten = snake length minus the starting length; BPM = f(floor(apples ÷ 4)); tier = min(10, floor(apples ÷ 8)); steps/sec and the step interval derive from BPM.
 - Beat clock: a step counter (0 at music start or restart) plus the audio-clock time of the next step.
@@ -129,7 +135,7 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
 - Speed: one snake step per sixteenth note, so steps/sec = BPM ÷ 15. BPM starts at 120 and rises 4 for every 4 apples eaten, reaching 200 at apple 80 (8 → 13.3 steps/sec; the earlier 20 steps/sec cap is dropped).
 - Music: 32-bar A-minor track with melody, bass, synth kick (quarters) and synth hi-hat (eighths); no audio files.
 - Pause stops the music; game over stops it; restart replays from bar 1.
-- Keys: `P` pause, `Enter` restart, `M` mute.
+- Keys: `P` pause, `Enter` restart, `M` mute. Touch: D-pad, Pause and Restart buttons plus the Mute button, always visible on every device.
 - Debug overlay: deferred.
 
 ## Open Questions
@@ -143,3 +149,5 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
 - Beat-synced movement (one step per sixteenth note): covered in this spec
 - Mute toggle: covered in this spec
 - Pause, high score, visual polish: nice-to-haves, covered in this spec
+- Touch controls (D-pad, Pause, Restart, Mute buttons): covered in this spec
+- Hazards (walls, bomb, enemy snake, re-laid and fading walls) → `./hazards.md` [complex, has its own spec]
