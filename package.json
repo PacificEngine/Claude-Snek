@@ -1,0 +1,16 @@
+{
+  "name": "claude-demo",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "author": "Joe Salomone <joe.salomone@leadventure.com>",
+  "license": "MIT",
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "start": "python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  }
+}

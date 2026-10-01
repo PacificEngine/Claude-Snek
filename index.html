@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Snake</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <span>Score: <strong id="score">0</strong></span>
+      <span>Best: <strong id="best">0</strong></span>
+      <button id="mute" type="button" aria-pressed="false">Mute (M)</button>
+    </header>
+    <canvas id="board" width="400" height="400" aria-label="Snake game board"></canvas>
+    <p id="message" role="status">Press an arrow key or WASD to start</p>
+    <p class="help">P pause · Enter restart · M mute</p>
+  </main>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
