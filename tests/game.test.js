@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createState, placeFood, queueDirection, tick, togglePause } from '../src/core/game.js';
 import { GRID_SIZE, START_LENGTH } from '../src/core/config.js';
+import { emptyHazards } from '../src/core/hazards.js';
 
 const rng = () => 0;
 
@@ -197,5 +198,85 @@ describe('togglePause', () => {
   it('does not advance while paused', () => {
     const s = stateWith({ status: 'paused' });
     expect(tick(s, rng)).toBe(s);
+  });
+});
+
+describe('placeFood with blocked and unreachable cells', () => {
+  const head = [{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }];
+  const wallColumn = new Set(Array.from({ length: GRID_SIZE }, (_, y) => `10,${y}`));
+
+  it('never picks a blocked cell', () => {
+    expect(placeFood(head, () => 0, new Set(['0,0']))).toEqual({ x: 1, y: 0 });
+  });
+
+  it('only picks cells the head can reach', () => {
+    const food = placeFood(head, () => 0.999, wallColumn);
+    expect(food.x).toBeLessThan(10);
+  });
+
+  it('falls back to any free cell when nothing is reachable', () => {
+    const boxedIn = new Set(['5,4', '5,6', '6,5']);
+    expect(placeFood(head, () => 0, boxedIn)).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe('hazards in the game loop', () => {
+  const withHazards = (hazards, overrides = {}) => stateWith({ hazards, ...overrides });
+  const solidWall = (x, y) => ({ cells: [{ x, y }], age: 30, fades: false });
+
+  it('starts a new game with no hazards', () => {
+    expect(createState(rng).hazards).toEqual(emptyHazards());
+  });
+
+  it('ends the game when the head hits a solid wall', () => {
+    const s = withHazards({ walls: [solidWall(6, 5)], bomb: null, enemy: null });
+    expect(tick(s, rng).status).toBe('gameOver');
+  });
+
+  it('ends the game on the solid bomb and on a live or dead enemy', () => {
+    const bomb = withHazards({ walls: [], bomb: { cells: [{ x: 6, y: 5 }], age: 30 }, enemy: null });
+    expect(tick(bomb, rng).status).toBe('gameOver');
+    const enemy = (status) => withHazards({
+      walls: [], bomb: null,
+      enemy: { cells: [{ x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }], age: 0, status },
+    });
+    expect(tick(enemy('alive'), rng).status).toBe('gameOver');
+    expect(tick(enemy('dead'), rng).status).toBe('gameOver');
+  });
+
+  it('lets the snake pass through ghosts', () => {
+    const ghostWall = { cells: [{ x: 6, y: 5 }], age: 5, fades: false };
+    const s = withHazards({ walls: [ghostWall], bomb: null, enemy: { cells: [{ x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }], age: 0, status: 'ghost' } });
+    expect(tick(s, rng).status).toBe('playing');
+  });
+
+  it('ages hazards every step', () => {
+    const s = withHazards({ walls: [{ cells: [{ x: 1, y: 1 }], age: 3, fades: false }], bomb: null, enemy: null });
+    expect(tick(s, rng).hazards.walls[0].age).toBe(4);
+  });
+
+  it('treats a missing hazards field as empty', () => {
+    const s = stateWith();
+    expect(tick(s, rng).hazards).toEqual(emptyHazards());
+  });
+
+  it('spawns the tier-2 walls on the 16th apple, after placing new food', () => {
+    const s = stateWith({
+      score: 15,
+      snake: [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }],
+      food: { x: 11, y: 10 },
+      hazards: emptyHazards(),
+    });
+    const next = tick(s, () => 0.2);
+    expect(next.score).toBe(16);
+    expect(next.hazards.walls.length).toBeGreaterThan(0);
+    const wallKeys = new Set(next.hazards.walls.flatMap((w) => w.cells.map((c) => `${c.x},${c.y}`)));
+    expect(wallKeys.has(`${next.food.x},${next.food.y}`)).toBe(false);
+  });
+
+  it('keeps hazards across a non-eating step and across game over', () => {
+    const hz = { walls: [solidWall(1, 1)], bomb: null, enemy: null };
+    expect(tick(withHazards(hz), rng).hazards.walls).toHaveLength(1);
+    expect(tick(withHazards({ ...hz, walls: [solidWall(6, 5)] }), rng).hazards.walls).toHaveLength(1);
   });
 });

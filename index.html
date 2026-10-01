@@ -13,10 +13,22 @@
     <header>
       <span>Score: <strong id="score">0</strong></span>
       <span>Best: <strong id="best">0</strong></span>
-      <button id="mute" type="button" aria-pressed="false">Mute (M)</button>
+      <button id="mute" type="button" data-action="mute" aria-pressed="false" aria-label="Mute (M)">Mute (M)</button>
     </header>
     <canvas id="board" width="400" height="400" aria-label="Snake game board"></canvas>
-    <p id="message" role="status">Press an arrow key or WASD to start</p>
+    <p id="message" role="status">Press an arrow key or WASD, or tap a direction, to start</p>
+    <div class="controls" role="group" aria-label="Touch controls">
+      <div class="dpad">
+        <button type="button" class="up" data-action="direction" data-direction="up" aria-label="Up">&#9650;&#xFE0E;</button>
+        <button type="button" class="left" data-action="direction" data-direction="left" aria-label="Left">&#9664;&#xFE0E;</button>
+        <button type="button" class="right" data-action="direction" data-direction="right" aria-label="Right">&#9654;&#xFE0E;</button>
+        <button type="button" class="down" data-action="direction" data-direction="down" aria-label="Down">&#9660;&#xFE0E;</button>
+      </div>
+      <div class="side">
+        <button type="button" data-action="pause" aria-label="Pause or resume">Pause</button>
+        <button type="button" data-action="restart" aria-label="Restart game">Restart</button>
+      </div>
+    </div>
     <p class="help">P pause · Enter restart · M mute</p>
   </main>
   <script type="module" src="src/main.js"></script>

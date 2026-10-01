@@ -124,6 +124,10 @@ export function createSynth(
       if (e.harmony !== null) tone('square', e.harmony, time, dt * 1.8, LEVEL.harmony);
       if (e.counter !== null) tone('sawtooth', e.counter, time, dt * 1.8, LEVEL.counter);
     },
+    // Some mobile browsers only unlock audio on a later gesture event; try again.
+    unlock() {
+      ctx?.resume?.()?.catch?.(() => {});
+    },
     silence() {
       if (!ctx) return;
       bus.disconnect();
