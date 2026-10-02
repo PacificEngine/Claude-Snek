@@ -6,6 +6,7 @@ const LEGACY_BEST = 'snake.highScore';
 const DIFFICULTY_KEY = 'snake.difficulty';
 const CUSTOM_KEY = 'snake.custom';
 const MUSIC_KEY = 'snake.music';
+const MUSIC_RANDOM_KEY = 'snake.musicRandom';
 
 // Resolve storage inside the try: reading localStorage itself can throw when it is blocked.
 function guarded(action, fallback, message) {
@@ -86,4 +87,14 @@ export function loadMusic(storage) {
 
 export function saveMusic(music, storage) {
   guarded(() => store(storage)?.setItem(MUSIC_KEY, JSON.stringify(sanitizeMusic(music))), undefined, 'Could not save music settings');
+}
+
+// The "Randomize every game" toggle: stored as 'true' or 'false'; anything else means off.
+export function loadMusicRandom(storage) {
+  return guarded(() => store(storage)?.getItem(MUSIC_RANDOM_KEY) === 'true', false, 'Could not read music randomize setting');
+}
+
+export function saveMusicRandom(on, storage) {
+  if (typeof on !== 'boolean') return;
+  guarded(() => store(storage)?.setItem(MUSIC_RANDOM_KEY, String(on)), undefined, 'Could not save music randomize setting');
 }

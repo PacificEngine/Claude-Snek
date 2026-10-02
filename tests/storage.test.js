@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
-  loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, SCORED,
+  loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, loadMusicRandom, saveMusicRandom, SCORED,
 } from '../src/storage.js';
 import { PRESETS, DEFAULT_MUSIC } from '../src/core/difficulty.js';
 
@@ -208,6 +208,34 @@ describe('music triggers', () => {
     const broken = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); } };
     expect(loadMusic(broken)).toEqual(DEFAULT_MUSIC);
     expect(() => saveMusic(DEFAULT_MUSIC, broken)).not.toThrow();
+    expect(spy).toHaveBeenCalled();
+  });
+});
+
+describe('randomize-every-game toggle', () => {
+  it('round-trips as true/false under its own key', () => {
+    const s = fakeStorage();
+    saveMusicRandom(true, s);
+    expect(s.data).toEqual({ 'snake.musicRandom': 'true' });
+    expect(loadMusicRandom(s)).toBe(true);
+    saveMusicRandom(false, s);
+    expect(s.data['snake.musicRandom']).toBe('false');
+    expect(loadMusicRandom(s)).toBe(false);
+  });
+  it('defaults to off for nothing or junk', () => {
+    ['', 'yes', '1', 'TRUE', 'null'].forEach((raw) => expect(loadMusicRandom(fakeStorage({ 'snake.musicRandom': raw }))).toBe(false));
+    expect(loadMusicRandom(fakeStorage())).toBe(false);
+  });
+  it('only stores a real boolean', () => {
+    const s = fakeStorage();
+    saveMusicRandom('true', s);
+    expect(s.data).toEqual({});
+  });
+  it('survives broken storage', () => {
+    const spy = quiet();
+    const broken = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); } };
+    expect(loadMusicRandom(broken)).toBe(false);
+    expect(() => saveMusicRandom(true, broken)).not.toThrow();
     expect(spy).toHaveBeenCalled();
   });
 });

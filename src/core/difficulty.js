@@ -192,6 +192,11 @@ export function randomSettings(rng) {
 // What the engine runs: the player's global music with every difficulty, but a Random roll keeps its own.
 export const settingsWithMusic = (difficulty, settings, music) => (difficulty === 'random' ? { ...music, ...settings } : withMusic(settings, music));
 
+// The music one game uses: the player's saved music, or (when "Randomize every game" is on) a fresh ramp roll.
+// Random already rolls its own music, so the toggle adds nothing there. The saved object is never touched.
+export const musicForGame = (difficulty, saved, randomizeOn, rng) =>
+  (randomizeOn && difficulty !== 'random' ? randomMusic(rng) : { ...saved });
+
 // Settings for a difficulty. Stays pure: Random needs the caller's injected `rng` (main.js passes Math.random);
 // without one it falls back to Medium rather than rolling from a hidden source.
 export function settingsFor(difficulty, custom, rng) {

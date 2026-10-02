@@ -105,6 +105,7 @@ All six "Trigger" fields (Wall, Bomb, Wall Spawn, Enemy Spawn, Moving Wall, Invi
 - The Music section is always editable and has a **Reset to default** button that restores the eleven defaults (0, 0, 8, 16 … 72) in the dialog; like the other edits it is kept when you Apply (Cancel discards it). Music values are corrected like Custom ones (whole numbers 0–1000, on leaving the field or pressing Enter). For every other section in Easy, Medium, Hard, Frantic and Random every field shows that preset's value and is locked (read-only). Only Custom fields are editable.
 - While Random is selected a **Reroll** button appears that draws a fresh roll (music included) to preview; Apply runs exactly the roll shown and Cancel discards it. It is hidden and disabled for every other difficulty.
 - The Music section also has a **Randomize** button that rolls new values for your own Music using Random's build-up rule. It is a draft until Apply (Cancel discards it), works under every difficulty except Random, where it is disabled because the fields show the locked roll.
+- The Music section has a **Randomize every game** checkbox. When on (and the difficulty is not Random, where it is disabled because Random already rolls its own music), every new game, on Apply and after each game over, uses a fresh Music roll under Random's build-up rule; that roll is for that game only and never changes your saved Music. While on, the Music fields show the roll the next game will use, locked, and Randomize and Reset to default are disabled; your own values come back when it is turned off. The choice is kept when you Apply (Cancel discards it).
 - List fields (the two half triggers) are typed as comma-separated numbers; entries are trimmed, each clamped to 1–1000 and rounded to a whole number, non-numbers dropped, and the corrected list is shown back. If nothing valid remains the previous list is kept.
 - Custom values are corrected when you leave the field or press Enter: out-of-range or off-step values are corrected to the nearest allowed value (clamped and rounded to the step), and anything that is not a number reverts to the previous valid value.
 - The menu can only be opened or applied when no run is in progress (before the first move, and after game over). While playing, the button is disabled.
@@ -149,7 +150,7 @@ None beyond the parent spec. Invalid stored settings are silently replaced, not 
 ## Data Model
 - `settings`: a plain object with the numeric fields above (the eleven Music triggers are held separately and merged in) plus the two half-trigger lists (arrays of numbers), camelCase names, always complete and valid.
 - Presets: `easy`, `medium`, `hard`, `frantic` constants; `custom` is built from stored values.
-- Stored (localStorage): `snake.difficulty` (`easy|medium|hard|frantic|random|custom`), `snake.music` (JSON of the eleven music triggers, validated field by field, defaults when missing), `snake.custom` (JSON of the non-music fields; an old save without the new fields or with the old speed field is filled field by field from Medium), `snake.highScore.easy|medium|hard|frantic` (non-negative integers). The legacy `snake.highScore` is read once as Medium's best.
+- Stored (localStorage): `snake.difficulty` (`easy|medium|hard|frantic|random|custom`), `snake.music` (JSON of the eleven music triggers, validated field by field, defaults when missing), `snake.musicRandom` (`true` or `false`, anything else is off), `snake.custom` (JSON of the non-music fields; an old save without the new fields or with the old speed field is filled field by field from Medium), `snake.highScore.easy|medium|hard|frantic` (non-negative integers). The legacy `snake.highScore` is read once as Medium's best.
 - The active `settings` live in the game state (`state.settings`); `state.growth` holds `{ carry, pending }` (carry in tenths; pending is cells still to grow).
 
 ## Testing Strategy
@@ -167,6 +168,7 @@ None beyond the parent spec. Invalid stored settings are silently replaced, not 
   - enemies: trigger, rate and max; dead ones replaced on the next apple
   - moving walls and invisible hazards: triggers; walls and bombs fade over the configured timing; enemies never fade
   - best scores: separate keys per difficulty, Custom neither read nor written, legacy key migrated to Medium once, tampered values rejected
+  - Randomize every game: the pure music-for-a-game helper returns the saved music when off, a valid build-up roll when on, keeps Random's own roll, never mutates the saved music; the toggle's storage round-trips and rejects junk
   - persistence of the chosen difficulty and Custom values, with validation of corrupt data
   - menu: locked fields for presets, editable for Custom, disabled during a run, values clamped on input (DOM-light tests of the pure helpers)
 - **Manual only:** the dialog's look and feel, behaviour on a phone, balance of each preset, and how a 50×50 board performs.
