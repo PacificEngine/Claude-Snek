@@ -4,6 +4,10 @@ import { hasRoute } from './pathing.js';
 import { musicTier } from './pacing.js';
 
 export const TELEGRAPH_STEPS = 24;
+// Ghost time for an obstacle placed on this apple: it shrinks as the game goes on.
+export const telegraphFor = (apples) => (apples > 120 ? 6 : apples > 60 ? 12 : TELEGRAPH_STEPS);
+// Each obstacle keeps the ghost time it was created with (24 for older objects).
+const ghostTime = (obj) => obj.telegraph ?? TELEGRAPH_STEPS;
 export const SAFE_DISTANCE = 5;
 export const LANE_LENGTH = 10;
 export const PLACEMENT_ATTEMPTS = 50;
@@ -13,12 +17,21 @@ export const FADE_APPLES = 100;
 export const FLASH_PERIOD = 4;
 const ENEMY_MOVE_EVERY = 2;
 
-export const emptyHazards = () => ({ walls: [], bomb: null, enemy: null });
+export const MAX_BOMBS = 12;
+const FIRST_BOMB_APPLE = 32;
+const APPLES_PER_BOMB = 4;
+// How many bombs there should be after this apple: 1 at apple 32, +1 every 4th apple, max 12.
+export const bombCountFor = (apples) =>
+  apples < FIRST_BOMB_APPLE
+    ? 0
+    : Math.min(MAX_BOMBS, 1 + Math.floor((apples - FIRST_BOMB_APPLE) / APPLES_PER_BOMB));
+
+export const emptyHazards = () => ({ walls: [], bombs: [], enemy: null });
 
 export function hazardCells(h) {
   return [
     ...h.walls.flatMap((w) => w.cells),
-    ...(h.bomb ? h.bomb.cells : []),
+    ...h.bombs.flatMap((b) => b.cells),
     ...(h.enemy ? h.enemy.cells : []),
   ];
 }
@@ -27,23 +40,24 @@ export const blockedKeys = (h) => new Set(hazardCells(h).map(cellKey));
 
 const overlapsSnake = (cells, snake) => cells.some((c) => snake.some((s) => sameCell(c, s)));
 
-// Telegraph over (24 steps) and no part of the snake is on it.
-export const isSolid = (obj, snake) => obj.age >= TELEGRAPH_STEPS && !overlapsSnake(obj.cells, snake);
+// Ghost time over and no part of the snake is on it.
+export const isSolid = (obj, snake) => obj.age >= ghostTime(obj) && !overlapsSnake(obj.cells, snake);
 
 export function hitsHazard(h, cell, snake) {
   const at = (cells) => cells.some((c) => sameCell(c, cell));
   if (h.walls.some((w) => at(w.cells) && isSolid(w, snake))) return true;
-  if (h.bomb && at(h.bomb.cells) && isSolid(h.bomb, snake)) return true;
+  if (h.bombs.some((b) => at(b.cells) && isSolid(b, snake))) return true;
   if (h.enemy && h.enemy.status !== 'ghost' && at(h.enemy.cells)) return true;
   return false;
 }
 
-export const isGhostVisible = (age, reducedMotion = false) =>
-  reducedMotion || age >= TELEGRAPH_STEPS - FLASH_PERIOD || Math.floor(age / FLASH_PERIOD) % 2 === 0;
+export const isGhostVisible = (age, reducedMotion = false, telegraph = TELEGRAPH_STEPS) =>
+  reducedMotion || age >= telegraph - FLASH_PERIOD || Math.floor(age / FLASH_PERIOD) % 2 === 0;
 
 export function wallOpacity(wall) {
-  if (!wall.fades || wall.age < TELEGRAPH_STEPS) return 1;
-  return Math.max(0, 1 - (wall.age - TELEGRAPH_STEPS) / FADE_STEPS);
+  const ghost = ghostTime(wall);
+  if (!wall.fades || wall.age < ghost) return 1;
+  return Math.max(0, 1 - (wall.age - ghost) / FADE_STEPS);
 }
 
 function laneKeys(head, direction) {
@@ -109,22 +123,31 @@ export function spawnForApple(world, hazards, rng, apples) {
   const tierAt = (n) => musicTier(n + START_LENGTH);
   const tier = tierAt(apples);
   const crossed = (t) => tier >= t && tierAt(apples - 1) < t;
+  const telegraph = telegraphFor(apples);
   let h = hazards;
   const at = () => ({ ...world, hazards: h });
   const addWall = (length, fades = false) => {
     const cells = placeSegment(at(), length, rng);
-    if (cells) h = { ...h, walls: [...h.walls, { cells, age: 0, fades }] };
+    if (cells) h = { ...h, walls: [...h.walls, { cells, age: 0, telegraph, fades }] };
   };
 
   if (crossed(2)) {
     for (let i = 0; i < INITIAL_SEGMENTS; i++) addWall(INITIAL_LENGTH);
   }
 
-  if (tier >= 4) {
-    const previous = h.bomb;
-    h = { ...h, bomb: null };
-    const cells = placeCell(at(), rng);
-    h = { ...h, bomb: cells ? { cells, age: 0 } : previous };
+  const wanted = bombCountFor(apples);
+  if (wanted > 0) {
+    // Every bomb jumps on every apple, one at a time. A bomb that cannot be moved
+    // keeps its old cell; a new bomb that cannot be placed is skipped (retried next apple).
+    const old = h.bombs;
+    const placed = [];
+    for (let i = 0; i < wanted; i++) {
+      const others = { ...h, bombs: [...placed, ...old.slice(i + 1)] };
+      const cells = placeCell({ ...world, hazards: others }, rng);
+      if (cells) placed.push({ cells, age: 0, telegraph });
+      else if (old[i]) placed.push(old[i]);
+    }
+    h = { ...h, bombs: placed };
   }
 
   if (tier >= 6 && wallCellCount(h) + PER_APPLE_LENGTH <= WALL_CELL_CAP) {
@@ -139,7 +162,7 @@ export function spawnForApple(world, hazards, rng, apples) {
     old.forEach((wall, i) => {
       const others = { ...h, walls: [...placed, ...old.slice(i + 1)] };
       const cells = placeSegment({ ...world, hazards: others }, wall.cells.length, rng);
-      placed.push(cells ? { cells, age: 0, fades } : wall);
+      placed.push(cells ? { cells, age: 0, telegraph, fades } : wall);
     });
     h = { ...h, walls: placed };
   }
@@ -147,21 +170,21 @@ export function spawnForApple(world, hazards, rng, apples) {
   if (tier >= 8 && (!h.enemy || h.enemy.status === 'dead')) {
     const without = { ...h, enemy: null };
     const cells = placeSegment({ ...world, hazards: without }, ENEMY_LENGTH, rng);
-    if (cells) h = { ...h, enemy: { cells, age: 0, status: 'ghost' } };
+    if (cells) h = { ...h, enemy: { cells, age: 0, telegraph, status: 'ghost' } };
   }
 
   return h;
 }
 
-function stepEnemy(enemy, { snake, food, walls, bomb }, rng) {
+function stepEnemy(enemy, { snake, food, walls, bombs }, rng) {
   if (enemy.status === 'dead') return enemy;
   if (enemy.status === 'ghost') {
-    const live = enemy.age >= TELEGRAPH_STEPS && !overlapsSnake(enemy.cells, snake);
+    const live = enemy.age >= ghostTime(enemy) && !overlapsSnake(enemy.cells, snake);
     return live ? { ...enemy, status: 'alive', age: 0 } : enemy;
   }
   if (enemy.age % ENEMY_MOVE_EVERY !== 0) return enemy;
 
-  const others = blockedKeys({ walls, bomb, enemy: null });
+  const others = blockedKeys({ walls, bombs, enemy: null });
   const snakeKeys = new Set(snake.map(cellKey));
   const ownBody = new Set(enemy.cells.slice(0, -1).map(cellKey)); // the tail cell is vacated
   const options = neighbors(enemy.cells[0]).filter((n) => {
@@ -179,8 +202,8 @@ function stepEnemy(enemy, { snake, food, walls, bomb }, rng) {
 // One game step for every hazard: everything ages, and the enemy may move or die.
 export function stepHazards(hazards, { snake, food }, rng) {
   const walls = hazards.walls.map((w) => ({ ...w, age: w.age + 1 }));
-  const bomb = hazards.bomb && { ...hazards.bomb, age: hazards.bomb.age + 1 };
+  const bombs = hazards.bombs.map((b) => ({ ...b, age: b.age + 1 }));
   let enemy = hazards.enemy && { ...hazards.enemy, age: hazards.enemy.age + 1 };
-  if (enemy) enemy = stepEnemy(enemy, { snake, food, walls, bomb }, rng);
-  return { walls, bomb, enemy };
+  if (enemy) enemy = stepEnemy(enemy, { snake, food, walls, bombs }, rng);
+  return { walls, bombs, enemy };
 }
