@@ -152,7 +152,7 @@ const pick = (rng, min, max, step = 1) => {
 
 const HALF_CAPS = [200, 400, 600, 800];
 const BPM_RANGE = [60, 260];
-const MUSIC_CAP = 99;
+const RAMP_STEP = 10;
 const CELL_CAPS = { maxLength: [3, 0.5], wallSpawnMax: [10, 0.2], bombMax: [1, 0.1], enemyMax: [1, 0.1] };
 // Highest value a Random roll may use: triggers stay below 100, counts scale with the board's cells.
 const randomCap = (field, cells) => {
@@ -160,6 +160,17 @@ const randomCap = (field, cells) => {
   const cap = CELL_CAPS[field.key];
   return cap ? Math.min(field.max, Math.max(cap[0], Math.floor(cap[1] * cells))) : field.max;
 };
+
+// The eleven music triggers as a build-up: the k-th earliest is at most 10k (so one is 0, two are within 10 ... all within 100),
+// then a Fisher-Yates shuffle decides which instrument gets which value.
+export function randomMusic(rng) {
+  const ramp = MUSIC_FIELDS.map((_, k) => pick(rng, 0, RAMP_STEP * k));
+  for (let i = ramp.length - 1; i > 0; i--) {
+    const j = Math.min(i, Math.floor(rng() * (i + 1)));
+    [ramp[i], ramp[j]] = [ramp[j], ramp[i]];
+  }
+  return Object.fromEntries(MUSIC_FIELDS.map((field, i) => [field.key, ramp[i]]));
+}
 
 // A complete, valid settings object with every field rolled from the injected `rng` (() => [0, 1)).
 // Grid size is rolled first (it leads FIELDS) because the caps on snake length and hazard counts depend on it.
@@ -175,12 +186,16 @@ export function randomSettings(rng) {
     settings[field.key] = pick(rng, min, max, field.step);
   });
   // The roll carries its own music triggers; they are for that game only and never replace the player's.
-  MUSIC_FIELDS.forEach((field) => { settings[field.key] = pick(rng, 0, MUSIC_CAP); });
-  return settings;
+  return { ...settings, ...randomMusic(rng) };
 }
 
 // What the engine runs: the player's global music with every difficulty, but a Random roll keeps its own.
 export const settingsWithMusic = (difficulty, settings, music) => (difficulty === 'random' ? { ...music, ...settings } : withMusic(settings, music));
+
+// The music one game uses: the player's saved music, or (when "Randomize every game" is on) a fresh ramp roll.
+// Random already rolls its own music, so the toggle adds nothing there. The saved object is never touched.
+export const musicForGame = (difficulty, saved, randomizeOn, rng) =>
+  (randomizeOn && difficulty !== 'random' ? randomMusic(rng) : { ...saved });
 
 // Settings for a difficulty. Stays pure: Random needs the caller's injected `rng` (main.js passes Math.random);
 // without one it falls back to Medium rather than rolling from a hidden source.
