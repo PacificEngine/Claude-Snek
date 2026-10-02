@@ -229,15 +229,15 @@ describe('hazards in the game loop', () => {
   });
 
   it('ends the game when the head hits a solid wall', () => {
-    const s = withHazards({ walls: [solidWall(6, 5)], bomb: null, enemy: null });
+    const s = withHazards({ walls: [solidWall(6, 5)], bombs: [], enemy: null });
     expect(tick(s, rng).status).toBe('gameOver');
   });
 
   it('ends the game on the solid bomb and on a live or dead enemy', () => {
-    const bomb = withHazards({ walls: [], bomb: { cells: [{ x: 6, y: 5 }], age: 30 }, enemy: null });
+    const bomb = withHazards({ walls: [], bombs: [{ cells: [{ x: 6, y: 5 }], age: 30 }], enemy: null });
     expect(tick(bomb, rng).status).toBe('gameOver');
     const enemy = (status) => withHazards({
-      walls: [], bomb: null,
+      walls: [], bombs: [],
       enemy: { cells: [{ x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }], age: 0, status },
     });
     expect(tick(enemy('alive'), rng).status).toBe('gameOver');
@@ -246,12 +246,12 @@ describe('hazards in the game loop', () => {
 
   it('lets the snake pass through ghosts', () => {
     const ghostWall = { cells: [{ x: 6, y: 5 }], age: 5, fades: false };
-    const s = withHazards({ walls: [ghostWall], bomb: null, enemy: { cells: [{ x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }], age: 0, status: 'ghost' } });
+    const s = withHazards({ walls: [ghostWall], bombs: [], enemy: { cells: [{ x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }], age: 0, status: 'ghost' } });
     expect(tick(s, rng).status).toBe('playing');
   });
 
   it('ages hazards every step', () => {
-    const s = withHazards({ walls: [{ cells: [{ x: 1, y: 1 }], age: 3, fades: false }], bomb: null, enemy: null });
+    const s = withHazards({ walls: [{ cells: [{ x: 1, y: 1 }], age: 3, fades: false }], bombs: [], enemy: null });
     expect(tick(s, rng).hazards.walls[0].age).toBe(4);
   });
 
@@ -275,7 +275,7 @@ describe('hazards in the game loop', () => {
   });
 
   it('keeps hazards across a non-eating step and across game over', () => {
-    const hz = { walls: [solidWall(1, 1)], bomb: null, enemy: null };
+    const hz = { walls: [solidWall(1, 1)], bombs: [], enemy: null };
     expect(tick(withHazards(hz), rng).hazards.walls).toHaveLength(1);
     expect(tick(withHazards({ ...hz, walls: [solidWall(6, 5)] }), rng).hazards.walls).toHaveLength(1);
   });
