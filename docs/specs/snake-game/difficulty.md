@@ -86,12 +86,12 @@ All six "Trigger" fields (Wall, Bomb, Wall Spawn, Enemy Spawn, Moving Wall, Invi
 **Frantic and Random**
 - **Frantic** is a fourth locked preset (column above): a 50×50 board at 160 → 280 BPM (Scale 1.4), growth 2, up to 1000 cells, six-step ghosts and the biggest, densest hazards. Values the request did not state use the Hard (shared) values. It keeps its own best score under `snake.highScore.frantic`.
 - **Random** is a locked mode that re-rolls every setting at the start of each new game (when it is chosen and on every restart after game over), using the injected random source. The menu shows the values of the current roll, locked, with a note that they change every game. Limits of a roll (all settings stay inside their normal ranges and steps):
-  - every non-list trigger (Wall, Bomb, Wall Spawn, Enemy Spawn, Moving Wall, Invisible Hazard) is below 100 (1–99). Random rolls its own Music triggers (see below);
+  - every non-list trigger (Wall, Bomb, Wall Spawn, Enemy Spawn, Moving Wall, Invisible Hazard) is below 100 (1–99). Random rolls its own Music triggers (see below, they follow the ramp rule instead);
   - Max Snake Size is at most 50% of the board cells (grid size squared), and at least 3;
   - Wall Spawn Max is at most 20% of the board cells (at least its minimum of 10), Bomb Spawn Max at most 10% (at least 1) and Enemy Spawn Max at most 10% (at least 1);
   - in each half-trigger list the first value is at most 200, the second at most 400, the third at most 600 and the fourth at most 800 (each at least 1); both lists have four values;
   - Initial BPM and Final BPM are each between 60 and 260;
-  - the eleven Music triggers are rolled too, each 0–99, but a Random roll's music is used only for that Random game: it is never saved and never replaces the player's own global Music settings, which come back unchanged as soon as another difficulty is chosen. While Random is selected the Music fields in the menu show the roll and are locked, and Reset to default is disabled;
+  - the eleven Music triggers are rolled too, as a build-up: sorted from lowest to highest, the first is 0, the second at most 10, the third at most 20 and so on up to the eleventh at most 100 (whole numbers, 0–100), assigned to the instruments in a random order so any instrument can come in early or late. A Random roll's music is used only for that Random game: it is never saved and never replaces the player's own global Music settings, which come back unchanged as soon as another difficulty is chosen. While Random is selected the Music fields in the menu show the roll and are locked, and Reset to default is disabled;
   - all other settings are uniform over their allowed values.
 - Random shows and saves no best score, exactly like Custom (the rules differ every game, so scores are not comparable). A Random roll (including its music) is never saved; only the choice of Random is remembered.
 

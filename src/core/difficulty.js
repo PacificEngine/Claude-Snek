@@ -152,7 +152,7 @@ const pick = (rng, min, max, step = 1) => {
 
 const HALF_CAPS = [200, 400, 600, 800];
 const BPM_RANGE = [60, 260];
-const MUSIC_CAP = 99;
+const RAMP_STEP = 10;
 const CELL_CAPS = { maxLength: [3, 0.5], wallSpawnMax: [10, 0.2], bombMax: [1, 0.1], enemyMax: [1, 0.1] };
 // Highest value a Random roll may use: triggers stay below 100, counts scale with the board's cells.
 const randomCap = (field, cells) => {
@@ -175,7 +175,14 @@ export function randomSettings(rng) {
     settings[field.key] = pick(rng, min, max, field.step);
   });
   // The roll carries its own music triggers; they are for that game only and never replace the player's.
-  MUSIC_FIELDS.forEach((field) => { settings[field.key] = pick(rng, 0, MUSIC_CAP); });
+  // The music builds up: the k-th earliest trigger is at most 10k (so one is 0, two are within 10 ... all within 100),
+  // then a Fisher-Yates shuffle decides which instrument gets which value.
+  const ramp = MUSIC_FIELDS.map((_, k) => pick(rng, 0, RAMP_STEP * k));
+  for (let i = ramp.length - 1; i > 0; i--) {
+    const j = Math.min(i, Math.floor(rng() * (i + 1)));
+    [ramp[i], ramp[j]] = [ramp[j], ramp[i]];
+  }
+  MUSIC_FIELDS.forEach((field, i) => { settings[field.key] = ramp[i]; });
   return settings;
 }
 
