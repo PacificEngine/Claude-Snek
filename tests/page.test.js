@@ -247,10 +247,10 @@ describe('Reroll and Randomize buttons', () => {
     expect(css).toMatch(/\.reroll\[hidden\][^{]*\{[^}]*display:\s*none/);
     expect(css).toMatch(/\.reroll[^{]*\{[^}]*min-height:\s*44px/);
   });
-  it('has a Randomize button next to Reset inside the Music fieldset', () => {
+  it('puts the Randomize button above Reset inside the Music fieldset', () => {
     expect(menu).toContain("randomizeBtn.textContent = 'Randomize'");
     expect(menu).toContain("'Randomize, music'");
-    expect(menu).toContain('musicEl.append(resetBtn, randomizeBtn)');
+    expect(menu).toContain('musicEl.append(randomizeBtn, resetBtn)');
     expect(css).toMatch(/\.music-randomize[^{]*\{[^}]*min-height:\s*44px/);
   });
   it('randomizes only the draft music with randomMusic(rng), disabled while Random is selected', () => {
@@ -264,6 +264,9 @@ describe('Randomize every game toggle', () => {
   const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
   const fn = (name) => menu.slice(menu.indexOf(`function ${name}(`), menu.indexOf('\n  }\n', menu.indexOf(`function ${name}(`)));
+  it('sits at the top of the Music fieldset, right under its legend', () => {
+    expect(menu).toContain('musicEl.insertBefore(toggleLabel, musicEl.children[1])');
+  });
   it('is a real labelled checkbox built with DOM APIs', () => {
     expect(menu).toContain("toggle.type = 'checkbox'");
     expect(menu).toContain("toggle.id = 'music-random'");

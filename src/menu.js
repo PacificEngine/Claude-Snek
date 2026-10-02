@@ -90,7 +90,7 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
     draftMusic = randomMusic(rng);
     showMusic();
   });
-  musicEl.append(resetBtn, randomizeBtn);
+  musicEl.append(randomizeBtn, resetBtn);
 
   // "Randomize every game": while ticked the Music fields preview the roll the next game uses; the player's draft waits underneath.
   const toggleLabel = document.createElement('label');
@@ -106,7 +106,7 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
     if (draftMusicRandom) draftMusicRoll = randomMusic(rng);
     showMusic();
   });
-  musicEl.append(toggleLabel);
+  musicEl.insertBefore(toggleLabel, musicEl.children[1]); // right under the legend, above the fields
 
   // Random only: draws a fresh roll (music included) to preview; Apply runs exactly what is shown.
   const rerollBtn = document.createElement('button');
