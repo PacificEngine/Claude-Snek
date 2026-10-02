@@ -46,6 +46,15 @@ Obstacles that appear as the player eats apples and make the board harder: first
 - On each apple, the new food is placed first on a free, reachable cell, then the hazards for that apple are placed and checked against it.
 - Every enemy's moves are also checked: it will not step to a cell that would cut the route.
 
+**Spreading the placement work over beats:**
+- Placing everything for an apple (every bomb, wall and enemy, each with its own checks) can take longer than one beat late in a big game. So the apple step only does the essential work, and the rest is spread over the following beats.
+- On an apple: the score, growth and the **new apple** are handled at once (the apple is placed first and immediately). The obstacles for that apple are then placed one at a time in the same order as when everything is placed at once (so an unbudgeted game is unchanged): **new first walls**, then **bombs**, then **spawned walls**, then the **re-laying of moving walls** (every wall, including the ones just added), then **enemies** (replace dead ones, then top up).
+- Each beat has a time budget (a share of the beat length; `main.js` passes an injected clock and the budget). Obstacles are placed one at a time until the budget runs out; at least one is placed per beat so work always progresses. The rest waits for the next beat, and so on until all are placed, however many beats it takes.
+- An obstacle that is waiting to be moved simply stays where it is until its new place is found, so nothing flickers out and every check still sees a consistent board. Each placement is checked against the board as it is when it is placed (current snake, current apple, current obstacles).
+- The ghost time of a placed obstacle comes from the apple count of the apple that triggered it, not from the beat it was placed on.
+- If another apple is eaten while placements are still waiting, the waiting work is replaced by the new apple's work (counts and positions are decided for the newest apple count).
+- With no budget (tests, simulations) everything is placed in the apple step, exactly as before. The core stays deterministic for a given sequence of random numbers and budgets; only the budget itself comes from the clock.
+
 **No islands:**
 - When a wall or a bomb is placed (first walls, spawned walls, re-laid walls, bombs), every cell of the board that is not a wall or bomb must stay connected (four-neighbour moves) to every other such cell. No cell and no group of cells may be cut off from the rest of the board by walls, bombs and the board edge. The snake's own body does not count as a barrier here, and enemies are ignored (they move). A placement that would create an island is rejected and retried like any other failed placement.
 

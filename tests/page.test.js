@@ -321,3 +321,10 @@ describe('Randomize every game toggle', () => {
     expect(main).toContain('const nextSettings = (gameMusic = musicForGame(');
   });
 });
+
+describe('main.js placement budget wiring', () => {
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  it('gives tick the real clock and a share of the current step as the placement budget', () => {
+    expect(main).toMatch(/tick\(state, Math\.random, \{ now: \(\) => performance\.now\(\), budgetMs: placementBudgetMs\(bpm\(state\.score, state\.settings\)\) \}\)/);
+  });
+});
