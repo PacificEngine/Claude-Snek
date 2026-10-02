@@ -13,7 +13,7 @@ A single-player, browser-based Snake-style game. It's a personal learning projec
 - Eating food raises the score by 1 and grows the snake by the Growth Count setting (1 cell per apple on Medium; fractional values carry over, 0 never grows; see `./difficulty.md`).
 - The board is a square grid whose size (10 to 50) comes from the active difficulty (Medium: 20).
 - A difficulty menu offers Easy, Medium, Hard and Custom. Presets are locked; Custom lets every setting be edited within its range. Easy, Medium and Hard each keep their own best score; Custom shows and saves none. The menu is only available when no run is in progress. See `./difficulty.md`.
-- Food spawns on a random empty cell, never on the snake.
+- Food spawns on a random empty cell, never on the snake, and never in a single-tile-wide dead end (a spot whose only way out is the way in) so eating it can never trap the snake; walls and bombs are placed so the rest of the board never gets cut into islands (details in `./hazards.md`).
 - The game ends when the snake hits the arena edge, itself, or a solid hazard (walls, bomb, enemy snake; see `./hazards.md`).
 - A restart is available after game over.
 - Game speed and music tempo move with every apple eaten: the BPM goes from the difficulty's Initial BPM towards its Final BPM by BPM Scale per apple (Medium: 120 to 200, 1 per apple, reached at the 80th apple). See `./difficulty.md`.

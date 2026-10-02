@@ -489,3 +489,69 @@ describe('settings reach the spawn rules', () => {
     expect(growing.food).toEqual({ x: 2, y: 0 });
   });
 });
+
+describe('placeFood avoids dead ends', () => {
+  const head = [{ x: 1, y: 1 }, { x: 0, y: 1 }, { x: 0, y: 0 }];
+  const seeded = (seed) => {
+    let a = seed;
+    return () => {
+      a |= 0; a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+  // Size 8: the open room is x 0..3 / y 0..3 with a 1-wide corridor along y=1 from x=4 to x=7 (a dead end).
+  const room = (size) => {
+    const blocked = new Set();
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const inRoom = x <= 3 && y <= 3;
+      const inCorridor = y === 1 && x >= 4;
+      if (!inRoom && !inCorridor) blocked.add(`${x},${y}`);
+    }
+    return blocked;
+  };
+
+  it('never lands in the dead-end corridor while the room has space (many seeds)', () => {
+    const blocked = room(8);
+    for (let seed = 1; seed <= 200; seed++) {
+      const f = placeFood(head, seeded(seed), blocked, 8);
+      expect(f.x).toBeLessThanOrEqual(3);
+      expect(f.y).toBeLessThanOrEqual(3);
+    }
+  });
+  it('lands on the one open cell when every other free cell is a dead end', () => {
+    // free: one open 2x2 block's worth is too many; use a 2x2 room plus a corridor, snake fills three of the room cells
+    const blocked = new Set();
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+      const inRoom = x <= 1 && y <= 1;
+      const inCorridor = y === 0 && x >= 2 && x <= 6;
+      if (!inRoom && !inCorridor) blocked.add(`${x},${y}`);
+    }
+    const snake = [{ x: 1, y: 1 }, { x: 0, y: 1 }, { x: 1, y: 0 }];
+    for (let seed = 1; seed <= 50; seed++) expect(placeFood(snake, seeded(seed), blocked, 8)).toEqual({ x: 0, y: 0 });
+  });
+  it('falls back to a dead end when every free cell is one', () => {
+    const blocked = new Set();
+    for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) if (!(y === 0 && x >= 2 && x <= 4) && !(x <= 1 && y === 0)) blocked.add(`${x},${y}`);
+    // a single straight corridor along y=0, x 0..4: every cell peels
+    const snake = [{ x: 0, y: 0 }];
+    const f = placeFood(snake, () => 0, blocked, 6);
+    expect(f).toEqual({ x: 1, y: 0 });
+  });
+  it('ignores the snake body when looking for dead ends', () => {
+    // open 10x10; the snake's body sits in a column, food next to it is allowed
+    const body = Array.from({ length: 8 }, (_, i) => ({ x: 5, y: 8 - i }));
+    const seen = new Set();
+    for (let seed = 1; seed <= 300; seed++) {
+      const f = placeFood(body, seeded(seed), new Set(), 10);
+      seen.add(`${f.x},${f.y}`);
+    }
+    expect(seen.has('4,5')).toBe(true);
+    expect(seen.has('6,3')).toBe(true);
+  });
+  it('is deterministic for a seed', () => {
+    const blocked = room(8);
+    expect(placeFood(head, seeded(7), blocked, 8)).toEqual(placeFood(head, seeded(7), blocked, 8));
+  });
+});

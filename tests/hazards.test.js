@@ -6,6 +6,8 @@ import {
 } from '../src/core/hazards.js';
 import { PRESETS } from '../src/core/difficulty.js';
 import { hasRoute } from '../src/core/pathing.js';
+import { hasIslands, deadEndCells } from '../src/core/shape.js';
+import { placeFood } from '../src/core/game.js';
 import { cellKey, manhattan } from '../src/core/grid.js';
 
 // small deterministic generator for repeatable "random" placement
@@ -861,6 +863,95 @@ describe('several enemies', () => {
       const e = { cells: [{ x: 5, y: 5 }, { x: 5, y: 6 }], age: 1, telegraph: 0, status: 'alive' };
       const h = stepHazards({ walls: [], bombs: [], enemies: [e] }, { snake, food: { x: 18, y: 18 }, size: 20 }, seeded(seed));
       expect(h.enemies[0].cells[0]).not.toEqual({ x: 5, y: 6 });
+    }
+  });
+});
+
+describe('placement shape rules', () => {
+  it('lets enemy placement skip the shape rules (source level)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../src/core/hazards.js', import.meta.url), 'utf8');
+    const calls = [...src.matchAll(/placeSegment\([^;]*s\.enemySize[^;]*;/g)].map((m) => m[0]);
+    expect(calls).toHaveLength(2);
+    calls.forEach((c) => expect(c).toContain('rng, false)'));
+  });
+  const small = (overrides = {}) => ({
+    snake: [{ x: 9, y: 5 }, { x: 9, y: 6 }, { x: 9, y: 7 }], direction: 'up', size: 10, food: { x: 5, y: 9 },
+    hazards: emptyHazards(), ...overrides,
+  });
+  const withWall = (cells) => ({ ...emptyHazards(), walls: [wall(cells)] });
+  const wallsAndBombs = (h) => new Set([...h.walls, ...h.bombs].flatMap((o) => o.cells.map(cellKey)));
+
+  it('rejects a wall that would cut off a corner cell and takes the next candidate', () => {
+    const hazards = withWall([{ x: 1, y: 0 }]);
+    // first candidate: vertical (0,1)-(0,2), which isolates (0,0); second: horizontal (4,3)-(5,3)
+    const rng = script(0.9, 0.0, 0.12, 0.1, 0.5, 0.3);
+    expect(placeSegment(small({ hazards }), 2, rng)).toEqual([{ x: 4, y: 3 }, { x: 5, y: 3 }]);
+  });
+  it('rejects a bomb that would cut off a corner cell', () => {
+    const hazards = withWall([{ x: 1, y: 0 }]);
+    // first candidate (0,1) isolates (0,0); second (4,3)
+    expect(placeCell(small({ hazards }), script(0.0, 0.1, 0.4, 0.3))).toEqual([{ x: 4, y: 3 }]);
+  });
+  it('lets enemies cut the board (they move, so they are ignored)', () => {
+    const hazards = withWall([{ x: 1, y: 0 }]);
+    const cutting = script(0.9, 0.0, 0.12);
+    expect(placeSegment(small({ hazards }), 2, cutting, false)).toEqual([{ x: 0, y: 1 }, { x: 0, y: 2 }]);
+  });
+  it('counts ghost walls and bombs as barriers', () => {
+    const ghost = { cells: [{ x: 1, y: 0 }], age: 0, telegraph: 24, origin: 'first' };
+    expect(placeCell(small({ hazards: { walls: [ghost], bombs: [], enemies: [] } }), script(0.0, 0.1, 0.4, 0.3))).toEqual([{ x: 4, y: 3 }]);
+    expect(placeCell(small({ hazards: { walls: [], bombs: [ghost], enemies: [] } }), script(0.0, 0.1, 0.4, 0.3))).toEqual([{ x: 4, y: 3 }]);
+  });
+  it('ignores enemies when looking for islands', () => {
+    const enemy = { cells: [{ x: 1, y: 0 }], age: 0, status: 'alive' };
+    const hazards = { walls: [], bombs: [], enemies: [enemy] };
+    // the enemy blocks (1,0); a bomb at (0,1) would trap (0,0) only if the enemy counted
+    expect(placeCell(small({ hazards }), script(0.0, 0.1))).toEqual([{ x: 0, y: 1 }]);
+  });
+  it('rejects a placement that would make the food a dead end', () => {
+    const food = { x: 0, y: 0 };
+    // a bomb at (1,0) leaves the food only (0,1): a dead end. Then (4,3) is fine.
+    expect(placeCell(small({ food }), script(0.1, 0.0, 0.4, 0.3))).toEqual([{ x: 4, y: 3 }]);
+  });
+  it('lets a placement through when the food was already a dead end', () => {
+    const food = { x: 0, y: 0 };
+    const hazards = withWall([{ x: 1, y: 0 }]);
+    expect(placeCell(small({ food, hazards }), script(0.1, 0.1, 0.4, 0.3))).toEqual([{ x: 1, y: 1 }]);
+  });
+  it('still checks the route first-class: no route means no placement', () => {
+    expect(placeCell(small(), cycle(0.5, 0.5))).toBeNull();
+  });
+
+  const SETTINGS = {
+    easy: PRESETS.easy, medium: PRESETS.medium, hard: PRESETS.hard,
+    frantic: { ...PRESETS.frantic, wallTrigger: 3, bombTrigger: 6, wallSpawnTrigger: 9, movingWallTrigger: 12, enemyTrigger: 15 },
+  };
+  describe.each([10, 20])('over many apples on a %i board', (size) => {
+    it.each(Object.keys(SETTINGS))('never makes an island out of walls and bombs (%s-like)', (name) => {
+      const s = { ...SETTINGS[name], gridSize: size, wallTrigger: 3, bombTrigger: 6, wallSpawnTrigger: 9, movingWallTrigger: 12, enemyTrigger: 15 };
+      const rng = seeded(size * 31 + name.length);
+      const snakeCells = [{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }];
+      let h = emptyHazards();
+      for (let apple = 1; apple <= 40; apple++) {
+        const food = placeFood(snakeCells, rng, blockedKeys(h), size);
+        h = spawnForApple({ snake: snakeCells, direction: 'right', food, size, pending: 0 }, h, rng, apple, s);
+        expect(hasIslands(wallsAndBombs(h), size)).toBe(false);
+        h = stepHazards(h, { snake: snakeCells, food, size, pending: 0 }, rng);
+      }
+      expect(h.walls.length).toBeGreaterThan(0);
+    });
+  });
+  it('never puts the food in a dead end it could avoid, across apples', () => {
+    const s = { ...PRESETS.hard, gridSize: 20, wallTrigger: 2, bombTrigger: 4 };
+    const rng = seeded(77);
+    const snakeCells = [{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }];
+    let h = emptyHazards();
+    for (let apple = 1; apple <= 30; apple++) {
+      const food = placeFood(snakeCells, rng, blockedKeys(h), 20);
+      h = spawnForApple({ snake: snakeCells, direction: 'right', food, size: 20, pending: 0 }, h, rng, apple, s);
+      const dead = deadEndCells(blockedKeys(h), 20);
+      expect(dead.has(cellKey(food))).toBe(false);
     }
   });
 });
