@@ -82,11 +82,21 @@ describe('difficulty menu markup', () => {
     expect(html).toMatch(/<option value="frantic">Frantic<\/option>\s*<option value="random">Random<\/option>\s*<option value="custom">/);
     expect(difficultyLabel('random')).toBe('Random');
   });
-  it('locks every field except for Custom, with notes for presets and for Random', () => {
+  it('leaves every difficulty field editable and turns an edit of a preset or roll into Custom', () => {
     const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
-    expect(menu).toContain("draftDifficulty !== 'custom'");
-    expect(menu).toContain('Random: every setting, Music included, changes each new game. Your own Music comes back when you choose another difficulty.');
-    expect(menu).toContain('These values are locked. Choose Custom to edit them.');
+    const refreshBody = menu.slice(menu.indexOf('function refresh()'), menu.indexOf("select.addEventListener('change'"));
+    expect(refreshBody).not.toContain('readOnly');
+    expect(menu).toContain("sanitize(draftDifficulty === 'random' ? draftRoll : settingsFor(draftDifficulty))");
+    expect(menu).toMatch(/draftCustom = next;\s*draftDifficulty = 'custom';\s*select\.value = 'custom';\s*refresh\(\);/);
+  });
+  it('does not switch to Custom when the edit leaves the value unchanged (junk text)', () => {
+    const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
+    expect(menu).toContain("JSON.stringify(next[field.key]) === JSON.stringify(base[field.key])) return refresh()");
+  });
+  it('explains the switch to Custom in the notes for presets and for Random', () => {
+    const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
+    expect(menu).toContain("Editing any value here switches to Custom with this difficulty\\'s values loaded.");
+    expect(menu).toContain('Editing a value switches to Custom with these values.');
   });
   it('shows the current roll for Random and hands the previewed roll to onApply', () => {
     const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
@@ -200,9 +210,6 @@ describe('music settings in the menu', () => {
     expect(menu).toContain('draftMusic = copySettings(current.music)');
     expect(menu).toContain('draftMusic = applyEdit(draftMusic, field, raw)');
     expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftMusic, draftMusicRandom, draftMusicRoll)');
-  });
-  it('tells preset users that Music stays editable', () => {
-    expect(menu).toContain('Music is always editable.');
   });
   it('lays the reset button out inside the narrow dialog', () => {
     expect(css).toMatch(/\.music-reset[^{]*\{[^}]*min-height:\s*44px/);

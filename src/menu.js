@@ -1,4 +1,4 @@
-import { DIFFICULTIES, FIELDS, MUSIC_FIELDS, DEFAULT_MUSIC, PRESETS, settingsFor, randomMusic, applyEdit, describeRange, formatList } from './core/difficulty.js';
+import { DIFFICULTIES, FIELDS, MUSIC_FIELDS, DEFAULT_MUSIC, PRESETS, settingsFor, sanitize, randomMusic, applyEdit, describeRange, formatList } from './core/difficulty.js';
 
 const LABELS = { easy: 'Easy', medium: 'Medium', hard: 'Hard', frantic: 'Frantic', random: 'Random', custom: 'Custom' };
 export const difficultyLabel = (difficulty) => LABELS[difficulty] ?? LABELS.medium;
@@ -55,8 +55,14 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
   FIELDS.forEach((field, i) => {
     if (i === 0 || field.group !== FIELDS[i - 1].group) groupEl = addGroup(field.group);
     const { label, input } = buildField(field, (raw) => {
-      draftCustom = applyEdit(draftCustom, field, raw);
-      input.value = show(field, draftCustom[field.key]);
+      // Editing a preset (or a Random roll) turns it into Custom, loaded with the values on screen.
+      const base = draftDifficulty === 'custom' ? draftCustom : sanitize(draftDifficulty === 'random' ? draftRoll : settingsFor(draftDifficulty));
+      const next = applyEdit(base, field, raw);
+      if (draftDifficulty !== 'custom' && JSON.stringify(next[field.key]) === JSON.stringify(base[field.key])) return refresh();
+      draftCustom = next;
+      draftDifficulty = 'custom';
+      select.value = 'custom';
+      refresh();
     });
     groupEl.append(label);
     inputs.set(field.key, input);
@@ -152,22 +158,17 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
 
   function refresh() {
     const values = draftDifficulty === 'random' ? draftRoll : settingsFor(draftDifficulty, draftCustom);
-    const locked = draftDifficulty !== 'custom';
     FIELDS.forEach((field) => {
-      const input = inputs.get(field.key);
-      input.value = show(field, values[field.key]);
-      input.readOnly = locked;
-      input.setAttribute('aria-readonly', String(locked));
-      input.classList.toggle('locked', locked);
+      inputs.get(field.key).value = show(field, values[field.key]);
     });
     showMusic();
     rerollBtn.hidden = draftDifficulty !== 'random';
     rerollBtn.disabled = draftDifficulty !== 'random';
     resetCustomBtn.hidden = draftDifficulty !== 'custom';
     resetCustomBtn.disabled = draftDifficulty !== 'custom';
-    if (!locked) noteEl.textContent = 'Edit any value. It is adjusted to the nearest allowed value.';
-    else if (draftDifficulty === 'random') noteEl.textContent = 'Random: every setting, Music included, changes each new game. Your own Music comes back when you choose another difficulty.';
-    else noteEl.textContent = 'These values are locked. Choose Custom to edit them. Music is always editable.';
+    if (draftDifficulty === 'custom') noteEl.textContent = 'Edit any value. It is adjusted to the nearest allowed value.';
+    else if (draftDifficulty === 'random') noteEl.textContent = 'Random: every setting, Music included, changes each new game. Editing a value switches to Custom with these values. Your own Music comes back when you choose another difficulty.';
+    else noteEl.textContent = 'Editing any value here switches to Custom with this difficulty\'s values loaded.';
   }
 
   select.addEventListener('change', () => {

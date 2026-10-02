@@ -1,7 +1,7 @@
 # Difficulty
 
 ## Overview
-A difficulty menu with six choices — Easy, Medium, Hard, Frantic, Random and Custom — that changes the grid size, the tempo curve, how fast the snake grows and how big it can get, and every hazard rule. Easy, Medium, Hard and Frantic are fixed presets (Random re-rolls its values every game) whose values are shown but locked; Custom lets the player edit every value within its allowed range. Easy, Medium, Hard and Frantic each keep their own best score. Custom and Random show and save none.
+A difficulty menu with six choices — Easy, Medium, Hard, Frantic, Random and Custom — that changes the grid size, the tempo curve, how fast the snake grows and how big it can get, and every hazard rule. Easy, Medium, Hard and Frantic are fixed presets (Random re-rolls its values every game) whose values are shown; editing one turns it into Custom; Custom lets the player edit every value within its allowed range. Easy, Medium, Hard and Frantic each keep their own best score. Custom and Random show and save none.
 
 ## Parent Domain
 `./snake-game.md`
@@ -103,7 +103,7 @@ All six "Trigger" fields (Wall, Bomb, Wall Spawn, Enemy Spawn, Moving Wall, Invi
 **The menu**
 - A "Difficulty: Medium" button in the header opens a dialog with a difficulty selector and all 39 settings, grouped under headings (Board, BPM, Growth, Ghost, Walls, Bombs, Spawning walls, Enemies, Effects, Music), each with its label and allowed range.
 - While Custom is selected, a **Reset to default** button (in the same place as Random's Reroll, under the note) sets every Custom value back to the Medium preset in the dialog; Apply keeps it, Cancel discards it. It is hidden and disabled for every other difficulty and never touches the Music settings.
-- The Music section is always editable and has a **Reset to default** button that restores the eleven defaults (0, 0, 8, 16 … 72) in the dialog; like the other edits it is kept when you Apply (Cancel discards it). Music values are corrected like Custom ones (whole numbers 0–1000, on leaving the field or pressing Enter). For every other section in Easy, Medium, Hard, Frantic and Random every field shows that preset's value and is locked (read-only). Only Custom fields are editable.
+- The Music section is always editable and has a **Reset to default** button that restores the eleven defaults (0, 0, 8, 16 … 72) in the dialog; like the other edits it is kept when you Apply (Cancel discards it). Music values are corrected like Custom ones (whole numbers 0–1000, on leaving the field or pressing Enter). Every other field is editable in every mode: editing a value of Easy, Medium, Hard or Frantic (or of a Random roll) switches the selector to **Custom** and loads that difficulty's values into Custom with the edit applied, so nothing else changes; an edit that leaves the value unchanged (for example junk text) does not switch. The Custom values replace the previously stored Custom values once applied.
 - While Random is selected a **Reroll** button appears that draws a fresh roll (music included) to preview; Apply runs exactly the roll shown and Cancel discards it. It is hidden and disabled for every other difficulty.
 - The Music section also has a **Randomize** button that rolls new values for your own Music using Random's build-up rule. It is a draft until Apply (Cancel discards it), works under every difficulty except Random, where it is disabled because the fields show the locked roll.
 - The Music section has a **Randomize every game** checkbox. When on (and the difficulty is not Random, where it is disabled because Random already rolls its own music), every new game, on Apply and after each game over, uses a fresh Music roll under Random's build-up rule; that roll is for that game only and never changes your saved Music. While on, the Music fields show the roll the next game will use, locked, and Randomize and Reset to default are disabled; your own values come back when it is turned off. The choice is kept when you Apply (Cancel discards it).
@@ -117,6 +117,7 @@ All six "Trigger" fields (Wall, Bomb, Wall Spawn, Enemy Spawn, Moving Wall, Invi
 - Never allow a setting outside its range or step, from the menu or from stored data.
 - Never save a score for Custom or Random.
 - Never let the menu change settings mid-run.
+- Never change a preset itself: edits always land in Custom.
 - Never trust stored settings without validating every field.
 
 ### Nice to Have
