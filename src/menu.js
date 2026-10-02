@@ -12,6 +12,8 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
   let draftCustom = copySettings(PRESETS.medium);
   let draftMusic = copySettings(DEFAULT_MUSIC);
   let draftRoll = copySettings(PRESETS.medium);
+  let draftMusicRandom = false;
+  let draftMusicRoll = randomMusic(rng);
   let currentRoll = null;
   const inputs = new Map();
   const musicInputs = new Map();
@@ -90,6 +92,22 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
   });
   musicEl.append(resetBtn, randomizeBtn);
 
+  // "Randomize every game": while ticked the Music fields preview the roll the next game uses; the player's draft waits underneath.
+  const toggleLabel = document.createElement('label');
+  toggleLabel.className = 'music-toggle';
+  const toggle = document.createElement('input');
+  toggle.type = 'checkbox';
+  toggle.id = 'music-random';
+  const toggleText = document.createElement('span');
+  toggleText.textContent = 'Randomize every game';
+  toggleLabel.append(toggle, toggleText);
+  toggle.addEventListener('change', () => {
+    draftMusicRandom = toggle.checked;
+    if (draftMusicRandom) draftMusicRoll = randomMusic(rng);
+    showMusic();
+  });
+  musicEl.append(toggleLabel);
+
   // Random only: draws a fresh roll (music included) to preview; Apply runs exactly what is shown.
   const rerollBtn = document.createElement('button');
   rerollBtn.type = 'button';
@@ -105,15 +123,19 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
   // Random shows its roll's music, locked; every other difficulty shows the player's own draft, editable.
   function showMusic() {
     const rolled = draftDifficulty === 'random';
+    const locked = rolled || draftMusicRandom;
     MUSIC_FIELDS.forEach((field) => {
       const input = musicInputs.get(field.key);
-      input.value = show(field, rolled ? draftRoll[field.key] : draftMusic[field.key]);
-      input.readOnly = rolled;
-      input.setAttribute('aria-readonly', String(rolled));
-      input.classList.toggle('locked', rolled);
+      const value = rolled ? draftRoll[field.key] : draftMusicRandom ? draftMusicRoll[field.key] : draftMusic[field.key];
+      input.value = show(field, value);
+      input.readOnly = locked;
+      input.setAttribute('aria-readonly', String(locked));
+      input.classList.toggle('locked', locked);
     });
-    resetBtn.disabled = rolled;
-    randomizeBtn.disabled = rolled;
+    resetBtn.disabled = locked;
+    randomizeBtn.disabled = locked;
+    toggle.checked = draftMusicRandom;
+    toggle.disabled = rolled;
   }
 
   function refresh() {
@@ -145,6 +167,11 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
     draftDifficulty = current.difficulty;
     draftCustom = copySettings(current.custom);
     draftMusic = copySettings(current.music);
+    draftMusicRandom = current.musicRandom;
+    // When already on, the game's own roll is the preview; otherwise a roll is ready if the toggle gets ticked.
+    draftMusicRoll = current.musicRandom && current.difficulty !== 'random'
+      ? Object.fromEntries(MUSIC_FIELDS.map((f) => [f.key, current.settings[f.key]]))
+      : randomMusic(rng);
     // Random previews the roll the next run uses; picking Random from another difficulty rolls one.
     currentRoll = current.difficulty === 'random' ? current.settings : null;
     draftRoll = rollFor();
@@ -153,7 +180,7 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
     dialog.showModal();
   });
   applyBtn.addEventListener('click', () => {
-    onApply(draftDifficulty, draftCustom, draftRoll, draftMusic);
+    onApply(draftDifficulty, draftCustom, draftRoll, draftMusic, draftMusicRandom, draftMusicRoll);
     dialog.close();
   });
   cancelBtn.addEventListener('click', () => dialog.close());

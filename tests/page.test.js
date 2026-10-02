@@ -91,7 +91,7 @@ describe('difficulty menu markup', () => {
   it('shows the current roll for Random and hands the previewed roll to onApply', () => {
     const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
     expect(menu).toContain('current.settings');
-    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftMusic)');
+    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftMusic, draftMusicRandom, draftMusicRoll)');
   });
   it('labels every difficulty in the menu', () => {
     expect(difficultyLabel('frantic')).toBe('Frantic');
@@ -150,10 +150,10 @@ describe('main.js Random wiring', () => {
   it('rolls at apply, unless the dialog handed over the roll it previewed', () => {
     const apply = body('applyDifficulty');
     expect(apply).toContain('roll');
-    expect(apply).toContain('nextSettings()');
+    expect(apply).toContain('nextSettings(');
   });
   it('hands the menu the current settings and an rng', () => {
-    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, settings })');
+    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, settings })');
     expect(main).toContain('rng: Math.random');
   });
 });
@@ -178,9 +178,11 @@ describe('music settings in the menu', () => {
     expect(show).toContain("draftDifficulty === 'random'");
     expect(show).toContain('draftRoll[field.key]');
     expect(show).toContain('draftMusic[field.key]');
-    expect(show).toContain('input.readOnly = rolled');
-    expect(show).toContain("input.classList.toggle('locked', rolled)");
-    expect(show).toContain('resetBtn.disabled = rolled');
+    expect(show).toContain('draftMusicRoll[field.key]');
+    expect(show).toContain('const locked = rolled || draftMusicRandom');
+    expect(show).toContain('input.readOnly = locked');
+    expect(show).toContain("input.classList.toggle('locked', locked)");
+    expect(show).toContain('resetBtn.disabled = locked');
   });
   it('never writes the roll into the player\'s draft music', () => {
     const assigns = [...menu.matchAll(/draftMusic = ([^;]*);/g)].map((m) => m[1]);
@@ -197,7 +199,7 @@ describe('music settings in the menu', () => {
   it('edits a copy of the music, corrected on change, and applies it with the choice', () => {
     expect(menu).toContain('draftMusic = copySettings(current.music)');
     expect(menu).toContain('draftMusic = applyEdit(draftMusic, field, raw)');
-    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftMusic)');
+    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftMusic, draftMusicRandom, draftMusicRoll)');
   });
   it('tells preset users that Music stays editable', () => {
     expect(menu).toContain('Music is always editable.');
@@ -210,16 +212,20 @@ describe('music settings in the menu', () => {
     expect(main).toContain('saveMusic(music)');
     expect(main).not.toMatch(/saveMusic\((?!music\))/);
     expect(main).not.toMatch(/music = (?!loadMusic\(\)|nextMusic)/);
-    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, settings })');
+    expect(main).toContain('let musicRandom = loadMusicRandom()');
+    expect(main).toContain('saveMusicRandom(musicRandom)');
+    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, settings })');
+    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, settings })');
     expect(main).not.toMatch(/settings = settingsFor\(/);
-    expect(main).toContain("settingsWithMusic(difficulty, settingsFor(difficulty, custom, Math.random), music)");
+    expect(main).toContain('settingsWithMusic(difficulty, settingsFor(difficulty, custom, Math.random), gameMusic)');
+    expect(main).toContain('musicForGame(difficulty, music, musicRandom, Math.random)');
   });
   it('main builds the initial, game-over and applied settings through the merge', () => {
     const body = (name) => main.slice(main.indexOf(`function ${name}(`), main.indexOf('\n}\n', main.indexOf(`function ${name}(`)));
     expect(main).toMatch(/let settings = nextSettings\(\)/);
     expect(body('advance')).toContain('settings = nextSettings()');
     expect(body('applyDifficulty')).toContain("settingsWithMusic('random', roll, music)");
-    expect(body('applyDifficulty')).toContain('nextSettings()');
+    expect(body('applyDifficulty')).toContain('nextSettings(');
   });
 });
 
@@ -249,6 +255,40 @@ describe('Reroll and Randomize buttons', () => {
   });
   it('randomizes only the draft music with randomMusic(rng), disabled while Random is selected', () => {
     expect(menu).toMatch(/randomizeBtn\.addEventListener\('click', \(\) => \{\s*draftMusic = randomMusic\(rng\);\s*showMusic\(\);/);
-    expect(fn('showMusic')).toContain('randomizeBtn.disabled = rolled');
+    expect(fn('showMusic')).toContain('randomizeBtn.disabled = locked');
+  });
+});
+
+describe('Randomize every game toggle', () => {
+  const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
+  const fn = (name) => menu.slice(menu.indexOf(`function ${name}(`), menu.indexOf('\n  }\n', menu.indexOf(`function ${name}(`)));
+  it('is a real labelled checkbox built with DOM APIs', () => {
+    expect(menu).toContain("toggle.type = 'checkbox'");
+    expect(menu).toContain("toggle.id = 'music-random'");
+    expect(menu).toContain("toggleText.textContent = 'Randomize every game'");
+    expect(menu).toMatch(/toggleLabel = document\.createElement\('label'\)/);
+    expect(menu).toContain('toggleLabel.append(toggle, toggleText)');
+    expect(css).toMatch(/\.music-toggle[^{]*\{[^}]*min-height:\s*44px/);
+  });
+  it('keeps the draft in the dialog and rolls a fresh preview when ticked', () => {
+    expect(menu).toMatch(/toggle\.addEventListener\('change', \(\) => \{\s*draftMusicRandom = toggle\.checked;\s*if \(draftMusicRandom\) draftMusicRoll = randomMusic\(rng\);\s*showMusic\(\);/);
+  });
+  it('is disabled under Random and checked from the draft', () => {
+    expect(fn('showMusic')).toContain('toggle.disabled = rolled');
+    expect(fn('showMusic')).toContain('toggle.checked = draftMusicRandom');
+  });
+  it('previews the current game\'s roll on open and hands the toggle and roll to onApply', () => {
+    expect(menu).toContain('draftMusicRandom = current.musicRandom');
+    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftMusic, draftMusicRandom, draftMusicRoll)');
+  });
+  it('main saves only the toggle and the player\'s own music on apply, and rolls the game music at every re-roll point', () => {
+    const apply = main.slice(main.indexOf('function applyDifficulty('), main.indexOf('\n}\n', main.indexOf('function applyDifficulty(')));
+    expect(apply).toContain('musicRandom = nextMusicRandom');
+    expect(apply).toContain('saveMusicRandom(musicRandom)');
+    expect(apply).toContain('saveMusic(music)');
+    expect(apply).toContain('nextSettings(musicRandom ? musicRoll : undefined)');
+    expect(main).toContain('const nextSettings = (gameMusic = musicForGame(');
   });
 });
