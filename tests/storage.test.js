@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { loadHighScore, saveHighScore } from '../src/storage.js';
+import {
+  loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, SCORED,
+} from '../src/storage.js';
+import { PRESETS } from '../src/core/difficulty.js';
 
 const fakeStorage = (initial = {}) => {
   const data = { ...initial };
@@ -9,72 +12,115 @@ const fakeStorage = (initial = {}) => {
     data,
   };
 };
+const quiet = () => vi.spyOn(console, 'error').mockImplementation(() => {});
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-  delete globalThis.localStorage;
-});
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-const throwingLocalStorage = () =>
-  Object.defineProperty(globalThis, 'localStorage', {
-    get() { throw new Error('SecurityError: storage disabled'); },
-    configurable: true,
+describe('best scores', () => {
+  it('keeps a separate best for each preset difficulty', () => {
+    const s = fakeStorage();
+    saveBest('easy', 7, s);
+    saveBest('medium', 12, s);
+    saveBest('hard', 3, s);
+    expect(s.data).toMatchObject({ 'snake.highScore.easy': '7', 'snake.highScore.medium': '12', 'snake.highScore.hard': '3' });
+    expect(SCORED.map((d) => loadBest(d, s))).toEqual([7, 12, 3]);
   });
-
-describe('loadHighScore', () => {
   it('returns 0 when nothing is stored', () => {
-    expect(loadHighScore(fakeStorage())).toBe(0);
+    expect(loadBest('easy', fakeStorage())).toBe(0);
   });
-  it('returns the stored integer', () => {
-    expect(loadHighScore(fakeStorage({ 'snake.highScore': '12' }))).toBe(12);
+  it('never reads or writes a custom score', () => {
+    const s = fakeStorage({ 'snake.highScore.custom': '99' });
+    expect(loadBest('custom', s)).toBe(0);
+    saveBest('custom', 50, s);
+    expect(Object.keys(s.data)).toEqual(['snake.highScore.custom']);
+    expect(s.data['snake.highScore.custom']).toBe('99'); // untouched
+  });
+  it('ignores unknown difficulties', () => {
+    const s = fakeStorage();
+    saveBest('nightmare', 5, s);
+    expect(s.data).toEqual({});
+    expect(loadBest('nightmare', s)).toBe(0);
+  });
+  it('uses the old single saved score as medium once', () => {
+    expect(loadBest('medium', fakeStorage({ 'snake.highScore': '21' }))).toBe(21);
+    expect(loadBest('easy', fakeStorage({ 'snake.highScore': '21' }))).toBe(0);
+    expect(loadBest('medium', fakeStorage({ 'snake.highScore': '21', 'snake.highScore.medium': '4' }))).toBe(4);
   });
   it.each(['abc', '-5', 'NaN', '1e999', '1.5', ''])('rejects tampered value %j', (bad) => {
-    expect(loadHighScore(fakeStorage({ 'snake.highScore': bad }))).toBe(0);
+    expect(loadBest('hard', fakeStorage({ 'snake.highScore.hard': bad }))).toBe(0);
   });
-  it('returns 0 and logs when storage throws', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const broken = { getItem() { throw new Error('denied'); } };
-    expect(loadHighScore(broken)).toBe(0);
+  it('survives storage that throws, and storage that is missing', () => {
+    const spy = quiet();
+    const broken = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('full'); } };
+    expect(loadBest('easy', broken)).toBe(0);
+    expect(() => saveBest('easy', 3, broken)).not.toThrow();
     expect(spy).toHaveBeenCalled();
-    spy.mockRestore();
-  });
-  it('returns 0 when storage is unavailable', () => {
     vi.stubGlobal('localStorage', undefined);
-    expect(loadHighScore()).toBe(0);
+    expect(loadBest('easy')).toBe(0);
+    expect(() => saveBest('easy', 1)).not.toThrow();
   });
-  it('returns 0 and logs when localStorage getter throws', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    throwingLocalStorage();
-    expect(loadHighScore()).toBe(0);
-    expect(spy).toHaveBeenCalled();
+  it('survives a localStorage getter that throws', () => {
+    const spy = quiet();
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('SecurityError'); } });
+    try {
+      expect(loadBest('easy')).toBe(0);
+      expect(() => saveBest('easy', 1)).not.toThrow();
+      expect(spy).toHaveBeenCalled();
+    } finally { delete globalThis.localStorage; }
   });
 });
 
-describe('saveHighScore', () => {
-  it('stores the score', () => {
+describe('chosen difficulty', () => {
+  it('round-trips a valid difficulty', () => {
     const s = fakeStorage();
-    saveHighScore(7, s);
-    expect(s.data['snake.highScore']).toBe('7');
+    saveDifficulty('hard', s);
+    expect(loadDifficulty(s)).toBe('hard');
+    saveDifficulty('custom', s);
+    expect(loadDifficulty(s)).toBe('custom');
   });
-  it('swallows and logs storage errors', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const broken = { setItem() { throw new Error('full'); } };
-    expect(() => saveHighScore(7, broken)).not.toThrow();
+  it('defaults to medium for missing or invalid values', () => {
+    expect(loadDifficulty(fakeStorage())).toBe('medium');
+    expect(loadDifficulty(fakeStorage({ 'snake.difficulty': 'nightmare' }))).toBe('medium');
+  });
+  it('does not save an invalid difficulty', () => {
+    const s = fakeStorage();
+    saveDifficulty('nightmare', s);
+    expect(s.data).toEqual({});
+  });
+});
+
+describe('custom settings', () => {
+  it('round-trips and validates every field', () => {
+    const s = fakeStorage();
+    saveCustom({ ...PRESETS.medium, gridSize: 33, speed: 1.7 }, s);
+    const loaded = loadCustom(s);
+    expect(loaded.gridSize).toBe(33);
+    expect(loaded.speed).toBe(1.7);
+    expect(loaded.growth).toBe(PRESETS.medium.growth);
+  });
+  it('stores the sanitized copy, not what it was given', () => {
+    const s = fakeStorage();
+    saveCustom({ gridSize: 9999, junk: 1 }, s);
+    const stored = JSON.parse(s.data['snake.custom']);
+    expect(stored.gridSize).toBe(50);
+    expect(stored).not.toHaveProperty('junk');
+    expect(Object.keys(stored)).toHaveLength(23);
+  });
+  it('replaces bad fields with medium defaults and ignores junk', () => {
+    const bad = fakeStorage({ 'snake.custom': JSON.stringify({ gridSize: 9999, speed: 'x', growth: 2 }) });
+    const loaded = loadCustom(bad);
+    expect(loaded.gridSize).toBe(50);
+    expect(loaded.speed).toBe(1);
+    expect(loaded.growth).toBe(2);
+    expect(loadCustom(fakeStorage({ 'snake.custom': 'not json' }))).toEqual(PRESETS.medium);
+    expect(loadCustom(fakeStorage({ 'snake.custom': '[1,2]' }))).toEqual(PRESETS.medium);
+    expect(loadCustom(fakeStorage())).toEqual(PRESETS.medium);
+  });
+  it('survives broken storage', () => {
+    const spy = quiet();
+    const broken = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); } };
+    expect(loadCustom(broken)).toEqual(PRESETS.medium);
+    expect(() => saveCustom(PRESETS.medium, broken)).not.toThrow();
     expect(spy).toHaveBeenCalled();
-    spy.mockRestore();
-  });
-  it('swallows and logs when localStorage getter throws', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    throwingLocalStorage();
-    expect(() => saveHighScore(5)).not.toThrow();
-    expect(spy).toHaveBeenCalled();
-  });
-  it('is a no-op when storage is undefined and no localStorage', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.stubGlobal('localStorage', undefined);
-    expect(() => saveHighScore(7)).not.toThrow();
-    expect(spy).not.toHaveBeenCalled();
-    spy.mockRestore();
   });
 });

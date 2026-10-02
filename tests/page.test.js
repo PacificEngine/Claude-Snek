@@ -60,3 +60,44 @@ describe('status messages', () => {
     expect(main).toContain('Game over — press Enter or tap Restart');
   });
 });
+
+describe('difficulty menu markup', () => {
+  it('has an open button, a dialog, a selector with the four difficulties, and Apply and Cancel', () => {
+    expect(html).toContain('id="difficulty-open"');
+    expect(html).toContain('<dialog id="difficulty-dialog"');
+    for (const d of ['easy', 'medium', 'hard', 'custom']) {
+      expect(html).toMatch(new RegExp(`<option value="${d}"`));
+    }
+    expect(html).toContain('id="difficulty-fields"');
+    expect(html).toContain('id="difficulty-apply"');
+    expect(html).toContain('id="difficulty-cancel"');
+    expect(html).toContain('id="best-wrap"');
+  });
+  it('keeps every button an accessible type=button (the dialog buttons too)', () => {
+    const all = [...html.matchAll(/<button\b[^>]*>/g)].map((m) => m[0]);
+    expect(all.length).toBeGreaterThanOrEqual(10);
+    all.forEach((b) => { expect(b).toContain('type="button"'); expect(b).toContain('aria-label='); });
+  });
+  it('builds the fields with DOM APIs, not innerHTML', () => {
+    const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
+    expect(menu).not.toMatch(/innerHTML|insertAdjacentHTML|eval\(/);
+    expect(menu).toContain('createElement');
+  });
+  it('does not let the game keys fire while the dialog is open', () => {
+    const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+    expect(main).toContain("dialog[open]");
+  });
+  it('styles locked fields and lets the dialog scroll inside itself', () => {
+    const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/dialog[^{]*\{[^}]*overflow/);
+    expect(css).toMatch(/\.locked|\[readonly\]/);
+  });
+});
+
+describe('main.js keyboard handling', () => {
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  it("lets Enter reach a focused button, select or input instead of restarting", () => {
+    expect(main).toContain("event.key === 'Enter' && event.target.closest?.('button, select, input')");
+    expect(main.indexOf("event.key === 'Enter'")).toBeLessThan(main.indexOf('actionForKey(event.key)'));
+  });
+});

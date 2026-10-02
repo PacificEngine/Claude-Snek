@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createState, placeFood, queueDirection, tick, togglePause } from '../src/core/game.js';
 import { GRID_SIZE, START_LENGTH } from '../src/core/config.js';
 import { emptyHazards } from '../src/core/hazards.js';
+import { PRESETS } from '../src/core/difficulty.js';
 
 const rng = () => 0;
 
@@ -229,16 +230,16 @@ describe('hazards in the game loop', () => {
   });
 
   it('ends the game when the head hits a solid wall', () => {
-    const s = withHazards({ walls: [solidWall(6, 5)], bombs: [], enemy: null });
+    const s = withHazards({ walls: [solidWall(6, 5)], bombs: [], enemies: [] });
     expect(tick(s, rng).status).toBe('gameOver');
   });
 
   it('ends the game on the solid bomb and on a live or dead enemy', () => {
-    const bomb = withHazards({ walls: [], bombs: [{ cells: [{ x: 6, y: 5 }], age: 30 }], enemy: null });
+    const bomb = withHazards({ walls: [], bombs: [{ cells: [{ x: 6, y: 5 }], age: 30 }], enemies: [] });
     expect(tick(bomb, rng).status).toBe('gameOver');
     const enemy = (status) => withHazards({
       walls: [], bombs: [],
-      enemy: { cells: [{ x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }], age: 0, status },
+      enemies: [{ cells: [{ x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }], age: 0, status }],
     });
     expect(tick(enemy('alive'), rng).status).toBe('gameOver');
     expect(tick(enemy('dead'), rng).status).toBe('gameOver');
@@ -246,12 +247,12 @@ describe('hazards in the game loop', () => {
 
   it('lets the snake pass through ghosts', () => {
     const ghostWall = { cells: [{ x: 6, y: 5 }], age: 5, fades: false };
-    const s = withHazards({ walls: [ghostWall], bombs: [], enemy: { cells: [{ x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }], age: 0, status: 'ghost' } });
+    const s = withHazards({ walls: [ghostWall], bombs: [], enemies: [{ cells: [{ x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }], age: 0, status: 'ghost' }] });
     expect(tick(s, rng).status).toBe('playing');
   });
 
   it('ages hazards every step', () => {
-    const s = withHazards({ walls: [{ cells: [{ x: 1, y: 1 }], age: 3, fades: false }], bombs: [], enemy: null });
+    const s = withHazards({ walls: [{ cells: [{ x: 1, y: 1 }], age: 3, fades: false }], bombs: [], enemies: [] });
     expect(tick(s, rng).hazards.walls[0].age).toBe(4);
   });
 
@@ -275,8 +276,161 @@ describe('hazards in the game loop', () => {
   });
 
   it('keeps hazards across a non-eating step and across game over', () => {
-    const hz = { walls: [solidWall(1, 1)], bombs: [], enemy: null };
+    const hz = { walls: [solidWall(1, 1)], bombs: [], enemies: [] };
     expect(tick(withHazards(hz), rng).hazards.walls).toHaveLength(1);
     expect(tick(withHazards({ ...hz, walls: [solidWall(6, 5)] }), rng).hazards.walls).toHaveLength(1);
+  });
+});
+
+describe('grid size from the settings', () => {
+  const sized = (gridSize) => ({ ...PRESETS.medium, gridSize });
+  it.each([[10, 5], [16, 8], [20, 10], [40, 20], [50, 25]])('starts centred on a %i board at %i', (size, mid) => {
+    const s = createState(rng, sized(size));
+    expect(s.snake[0]).toEqual({ x: mid, y: mid });
+    expect(s.snake).toHaveLength(START_LENGTH);
+    expect(s.settings.gridSize).toBe(size);
+    expect(s.growth).toEqual({ carry: 0, pending: 0 });
+  });
+  it('defaults to the medium preset', () => {
+    expect(createState(rng).settings).toBe(PRESETS.medium);
+  });
+  it('ends the game at the edge of a small board', () => {
+    const s = stateWith({ snake: [{ x: 9, y: 5 }, { x: 8, y: 5 }, { x: 7, y: 5 }], settings: sized(10) });
+    expect(tick(s, rng).status).toBe('gameOver');
+  });
+  it('lets the same move continue on the default board', () => {
+    const s = stateWith({ snake: [{ x: 9, y: 5 }, { x: 8, y: 5 }, { x: 7, y: 5 }] });
+    expect(tick(s, rng).status).toBe('playing');
+  });
+  it('places food inside a small board', () => {
+    for (let i = 0; i < 50; i++) {
+      const f = placeFood([{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }], () => (i + 0.5) / 50, new Set(), 10);
+      expect(f.x).toBeLessThan(10);
+      expect(f.y).toBeLessThan(10);
+    }
+  });
+});
+
+describe('growth count', () => {
+  const settingsWith = (growth) => ({ ...PRESETS.medium, gridSize: 30, growth });
+  const start = (growth) => stateWith({
+    snake: [{ x: 3, y: 15 }, { x: 2, y: 15 }, { x: 1, y: 15 }], food: null, settings: settingsWith(growth),
+  });
+  // put the food right in front of the head and step once
+  const eat = (s) => {
+    const head = s.snake[0];
+    return tick({ ...s, food: { x: head.x + 1, y: head.y } }, rng);
+  };
+  const steps = (s, n) => { for (let i = 0; i < n; i++) s = tick(s, rng); return s; };
+
+  it('grows one cell per apple at 1 (the old behavior)', () => {
+    let s = eat(start(1));
+    expect(s.snake).toHaveLength(4);
+    expect(s.score).toBe(1);
+    s = eat(s);
+    expect(s.snake).toHaveLength(5);
+  });
+
+  it('never grows at 0, but still scores', () => {
+    let s = start(0);
+    for (let i = 0; i < 5; i++) s = eat(s);
+    expect(s.snake).toHaveLength(3);
+    expect(s.score).toBe(5);
+  });
+
+  it('needs 2 apples per cell at 0.5', () => {
+    let s = eat(start(0.5));
+    expect(s.snake).toHaveLength(3);
+    s = eat(s);
+    expect(s.snake).toHaveLength(4);
+    s = eat(eat(s));
+    expect(s.snake).toHaveLength(5);
+  });
+
+  it('needs 10 apples per cell at 0.1', () => {
+    let s = start(0.1);
+    for (let i = 0; i < 9; i++) s = eat(s);
+    expect(s.snake).toHaveLength(3);
+    s = eat(s);
+    expect(s.snake).toHaveLength(4);
+    expect(s.score).toBe(10);
+  });
+
+  it('adds up fractional growth exactly: 0.3 for 10 apples is 3 cells', () => {
+    let s = start(0.3);
+    for (let i = 0; i < 10; i++) s = eat(s);
+    s = steps({ ...s, food: null }, 5);
+    expect(s.snake).toHaveLength(6);
+  });
+
+  it('adds the new cells one per step at 4', () => {
+    let s = eat(start(4));
+    expect(s.snake).toHaveLength(4); // grows on the eating step
+    s = steps({ ...s, food: null }, 1);
+    expect(s.snake).toHaveLength(5);
+    s = steps(s, 2);
+    expect(s.snake).toHaveLength(7); // 3 + 4
+    s = steps(s, 3);
+    expect(s.snake).toHaveLength(7); // done
+  });
+
+  it('ends 0.3 x 10 apples with no carry left', () => {
+    let s = start(0.3);
+    for (let i = 0; i < 10; i++) s = eat(s);
+    expect(steps({ ...s, food: null }, 5).growth).toEqual({ carry: 0, pending: 0 });
+  });
+
+  it('adds to the pending cells when eating again while still growing', () => {
+    let s = eat(start(4));
+    s = eat(s);
+    expect(s.growth.pending).toBe(6);
+    expect(s.snake).toHaveLength(5);
+  });
+
+  it('dies on the tail cell while still growing, but may follow it when not', () => {
+    const s = stateWith({
+      snake: [{ x: 5, y: 5 }, { x: 6, y: 5 }, { x: 6, y: 6 }, { x: 5, y: 6 }],
+      direction: 'down', food: null, settings: PRESETS.medium, hazards: emptyHazards(),
+    });
+    expect(tick({ ...s, growth: { carry: 0, pending: 1 } }, rng).status).toBe('gameOver');
+    expect(tick({ ...s, growth: { carry: 0, pending: 0 } }, rng).status).toBe('playing');
+  });
+
+  it('keeps old states without settings or growth behaving like medium', () => {
+    const s = tick(stateWith({ food: { x: 6, y: 5 } }), rng);
+    expect(s.snake).toHaveLength(4);
+    expect(s.growth).toEqual({ carry: 0, pending: 0 });
+  });
+});
+
+describe('settings reach the spawn rules', () => {
+  it('spawns the first walls from the wall trigger of the settings', () => {
+    const settings = { ...PRESETS.medium, wallTrigger: 3, wallCount: 2, wallSize: 2 };
+    const s = stateWith({
+      score: 2, settings,
+      snake: [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }], food: { x: 11, y: 10 }, hazards: emptyHazards(),
+    });
+    const next = tick(s, () => 0.2);
+    expect(next.score).toBe(3);
+    expect(next.hazards.walls.length).toBeGreaterThan(0);
+  });
+
+  it('places food knowing the tail stays put while growth is pending', () => {
+    // 3x3 board, snake grows this step so after the move it is (1,1),(1,2),(0,2),(0,1) and
+    // walls fence off the top row. With no growth left over the tail clears in time, so only
+    // (2,2) is on a route and gets the food. With growth still pending nothing is on a route,
+    // so the fallback pool is every free cell and its first, (2,0), is chosen.
+    const solid = (x, y) => ({ cells: [{ x, y }], age: 30, fades: false });
+    const base = stateWith({
+      snake: [{ x: 1, y: 2 }, { x: 0, y: 2 }, { x: 0, y: 1 }], direction: 'up', food: { x: 1, y: 1 },
+      settings: { ...PRESETS.medium, gridSize: 3, growth: 0 },
+      hazards: { walls: [solid(2, 1), solid(1, 0), solid(0, 0)], bombs: [], enemies: [] },
+    });
+    const done = tick({ ...base, growth: { carry: 0, pending: 1 } }, rng);
+    expect(done.growth.pending).toBe(0);
+    expect(done.food).toEqual({ x: 2, y: 2 });
+    const growing = tick({ ...base, growth: { carry: 0, pending: 2 } }, rng);
+    expect(growing.growth.pending).toBe(1);
+    expect(growing.food).toEqual({ x: 2, y: 0 });
   });
 });
