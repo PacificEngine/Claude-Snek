@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bpm, musicTier, stepSeconds } from '../src/core/pacing.js';
+import { bpm, activeLayers, stepSeconds } from '../src/core/pacing.js';
 import { PRESETS } from '../src/core/difficulty.js';
 
 
@@ -53,20 +53,55 @@ describe('bpm', () => {
   });
 });
 
-describe('musicTier', () => {
-  it('is 0 for the first seven apples', () => {
-    expect(musicTier(0)).toBe(0);
-    expect(musicTier(7)).toBe(0);
+describe('activeLayers', () => {
+  const NONE = {
+    hat: false, melody: false, snare: false, sixteenthHat: false, arp: false,
+    bassPulse: false, harmony: false, counter: false, fill: false,
+  };
+  const ORDER = ['hat', 'melody', 'snare', 'sixteenthHat', 'arp', 'bassPulse', 'harmony', 'counter', 'fill'];
+  const upTo = (n) => Object.fromEntries(ORDER.map((name, i) => [name, i < n]));
+  it('with the defaults, switches on one layer per 8 apples in the old tier order', () => {
+    const s = PRESETS.medium;
+    expect(activeLayers(0, s)).toEqual(NONE);
+    expect(activeLayers(7, s)).toEqual(NONE);
+    expect(activeLayers(8, s)).toEqual(upTo(1));
+    expect(activeLayers(16, s)).toEqual(upTo(2));
+    expect(activeLayers(24, s)).toEqual(upTo(3));
+    expect(activeLayers(32, s)).toEqual(upTo(4));
+    expect(activeLayers(40, s)).toEqual(upTo(5));
+    expect(activeLayers(48, s)).toEqual(upTo(6));
+    expect(activeLayers(56, s)).toEqual(upTo(7));
+    expect(activeLayers(64, s)).toEqual(upTo(8));
+    expect(activeLayers(71, s)).toEqual(upTo(8));
+    expect(activeLayers(72, s)).toEqual(upTo(9));
+    expect(activeLayers(80, s)).toEqual(upTo(9));
   });
-  it('rises by one for every 8 apples', () => {
-    expect(musicTier(8)).toBe(1);
-    expect(musicTier(15)).toBe(1);
-    expect(musicTier(16)).toBe(2);
+  it('reads each layer from its own trigger, in any order', () => {
+    const s = { ...PRESETS.medium, fillTrigger: 0, hatTrigger: 100 };
+    expect(activeLayers(0, s).fill).toBe(true);
+    expect(activeLayers(0, s).hat).toBe(false);
+    expect(activeLayers(99, s).hat).toBe(false);
+    expect(activeLayers(100, s).hat).toBe(true);
   });
-  it('is 9 on apple 79 and 10 on apple 80, capped at 10', () => {
-    expect(musicTier(79)).toBe(9);
-    expect(musicTier(80)).toBe(10);
-    expect(musicTier(500)).toBe(10);
+  it('maps the fast hi-hat to fastHatTrigger', () => {
+    const s = { ...PRESETS.medium, fastHatTrigger: 3 };
+    expect(activeLayers(2, s).sixteenthHat).toBe(false);
+    expect(activeLayers(3, s).sixteenthHat).toBe(true);
+  });
+  it('treats 0 as active from the first apple and equal triggers as one moment', () => {
+    const zero = Object.fromEntries(Object.keys(PRESETS.medium).filter((k) => k.endsWith('Trigger') && /^(hat|melody|snare|fastHat|arp|bassPulse|harmony|counter|fill)Trigger$/.test(k)).map((k) => [k, 0]));
+    expect(activeLayers(0, { ...PRESETS.medium, ...zero })).toEqual(upTo(9));
+    const same = { ...PRESETS.medium, hatTrigger: 5, melodyTrigger: 5 };
+    expect(activeLayers(4, same).hat).toBe(false);
+    expect(activeLayers(5, same)).toMatchObject({ hat: true, melody: true });
+  });
+  it('keeps a trigger of 1000 off until apple 1000', () => {
+    const s = { ...PRESETS.medium, counterTrigger: 1000 };
+    expect(activeLayers(999, s).counter).toBe(false);
+    expect(activeLayers(1000, s).counter).toBe(true);
+  });
+  it('defaults to the Medium settings', () => {
+    expect(activeLayers(8)).toEqual(upTo(1));
   });
 });
 

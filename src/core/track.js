@@ -2,22 +2,15 @@ export const STEPS_PER_BAR = 16;
 export const TOTAL_BARS = 32;
 export const TOTAL_STEPS = STEPS_PER_BAR * TOTAL_BARS;
 
-// The music tier at which each layer enters (tier 0 is bass + kick only).
-export const TIERS = {
-  hat: 1,
-  melody: 2,
-  snare: 3,
-  sixteenthHat: 4,
-  arp: 5,
-  bassPulse: 6,
-  harmony: 7,
-  counter: 8,
-  fill: 9,
-};
+// The independent layers, in the order they enter by default (bass and kick always play).
+export const LAYERS = ['hat', 'melody', 'snare', 'sixteenthHat', 'arp', 'bassPulse', 'harmony', 'counter', 'fill'];
+
+// The layers switched on at tier n: the first n of LAYERS (tier 0 is bass + kick only).
+export const layersForTier = (tier) => Object.fromEntries(LAYERS.map((name, i) => [name, tier >= i + 1]));
 
 // MIDI roots for the bass (one octave below the melody's home register).
 const BASS_ROOT = { Am: 45, F: 41, C: 48, G: 43, E: 40 };
-// Below the bass-pulse tier the bass plays each quarter note: root, root, octave up, root.
+// Without the bass-pulse layer the bass plays each quarter note: root, root, octave up, root.
 const BASS_OFFSETS = [0, 0, 12, 0];
 
 // Chord tones for the arpeggio, in the register just under the melody.
@@ -80,7 +73,8 @@ function thirdAbove(midi) {
   return midi + ((up - pc + 12) % 12);
 }
 
-export function eventsAt(step, tier) {
+// `active` maps each LAYERS name to a boolean; every layer decides for itself.
+export function eventsAt(step, active) {
   const s = ((step % TOTAL_STEPS) + TOTAL_STEPS) % TOTAL_STEPS;
   const bar = Math.floor(s / STEPS_PER_BAR);
   const inBar = s % STEPS_PER_BAR;
@@ -91,24 +85,26 @@ export function eventsAt(step, tier) {
   const pattern = section.melody ? section.melody[chord] : null;
   const slot = inBar / 2;
 
-  const melodyRaw = tier >= TIERS.melody && onEighth && pattern ? pattern[slot] : 0;
-  const counterRaw = tier >= TIERS.counter && onEighth && pattern ? pattern[(slot + 6) % 8] : 0;
-  const melody = melodyRaw ? melodyRaw + section.transpose : null;
+  // The melody line exists even when its layer is off: harmony follows the line, not the sound.
+  const melodyRaw = onEighth && pattern ? pattern[slot] : 0;
+  const counterRaw = active.counter && onEighth && pattern ? pattern[(slot + 6) % 8] : 0;
+  const line = melodyRaw ? melodyRaw + section.transpose : null;
+  const melody = active.melody ? line : null;
   const counter = counterRaw ? counterRaw + section.transpose + 12 : null;
-  const harmony = melody !== null && tier >= TIERS.harmony ? thirdAbove(melody) : null;
-  const arp = tier >= TIERS.arp ? CHORD_TONES[chord][ARP_ORDER[inBar % 4]] : null;
+  const harmony = active.harmony && line !== null ? thirdAbove(line) : null;
+  const arp = active.arp ? CHORD_TONES[chord][ARP_ORDER[inBar % 4]] : null;
 
   let bass = null;
-  if (tier >= TIERS.bassPulse) {
+  if (active.bassPulse) {
     if (onEighth) bass = BASS_ROOT[chord] + (slot % 2 === 1 ? 12 : 0);
   } else if (onQuarter) {
     bass = BASS_ROOT[chord] + BASS_OFFSETS[inBar / 4];
   }
 
   const backbeat = inBar === 4 || inBar === 12;
-  const fill = tier >= TIERS.fill && bar % 4 === 3 && inBar >= 12;
-  const snare = tier >= TIERS.snare && (backbeat || fill);
-  const hat = tier >= TIERS.sixteenthHat ? true : tier >= TIERS.hat && onEighth;
+  const fill = bar % 4 === 3 && inBar >= 12;
+  const snare = Boolean((active.snare && backbeat) || (active.fill && fill));
+  const hat = active.sixteenthHat ? true : Boolean(active.hat) && onEighth;
 
   return { melody, harmony, counter, arp, bass, kick: onQuarter, snare, hat };
 }

@@ -50,12 +50,21 @@ A difficulty menu with four choices — Easy, Medium, Hard and Custom — that c
 | 26 | Effects | Invisible Hazard Trigger | 1–1000 | 100 | 100 | 100 |
 | 27 | Effects | Invisible Hazard Timing | 1–40 steps | 20 | 16 | 8 |
 | 28 | Effects | Invisible Hazard Half Trigger | comma list of 1–1000 | 200, 400, 600, 800 | 200, 400, 600, 800 | 200, 400, 600, 800 |
+| 29 | Music | Hi-Hat Trigger | 0–1000 | 8 | 8 | 8 |
+| 30 | Music | Melody Trigger | 0–1000 | 16 | 16 | 16 |
+| 31 | Music | Snare Trigger | 0–1000 | 24 | 24 | 24 |
+| 32 | Music | Fast Hi-Hat Trigger | 0–1000 | 32 | 32 | 32 |
+| 33 | Music | Arpeggio Trigger | 0–1000 | 40 | 40 | 40 |
+| 34 | Music | Bass Pulse Trigger | 0–1000 | 48 | 48 | 48 |
+| 35 | Music | Harmony Trigger | 0–1000 | 56 | 56 | 56 |
+| 36 | Music | Counter-Melody Trigger | 0–1000 | 64 | 64 | 64 |
+| 37 | Music | Drum Fill Trigger | 0–1000 | 72 | 72 | 72 |
 
 Every "Trigger" is an apple count: the feature starts on the apple whose count reaches that number. "Apples" always means apples eaten (the score), not the snake's length.
 
 **What each setting does**
 1. **Grid Size:** the board is Size × Size. The snake starts with 3 cells at the centre heading right. The canvas stays the same pixel size, so cells get smaller as the grid grows.
-2–4. **BPM:** the tempo starts at *Initial BPM* and moves by *BPM Scale* for every apple eaten (not every 4th), towards *Final BPM*, where it stops: `bpm = min(Final, Initial + Scale × apples)` when Final is above Initial, and `max(Final, Initial − Scale × apples)` when Final is below it (equal values give a constant tempo). The value may be fractional. One step is still one sixteenth note, so the step rate follows the tempo. The music tier is unchanged (one tier per 8 apples).
+2–4. **BPM:** the tempo starts at *Initial BPM* and moves by *BPM Scale* for every apple eaten (not every 4th), towards *Final BPM*, where it stops: `bpm = min(Final, Initial + Scale × apples)` when Final is above Initial, and `max(Final, Initial − Scale × apples)` when Final is below it (equal values give a constant tempo). The value may be fractional. One step is still one sixteenth note, so the step rate follows the tempo. The music layers still follow the apple count, not the tempo (see 29–37).
 5. **Growth Count:** each apple eaten adds this amount to a growth carry. Whenever the carry reaches a whole number, the snake grows by that many cells and the carry drops by that amount. So 0.1 grows 1 cell every 10th apple, 0.5 grows 1 cell every 2nd apple, 1 grows 1 cell per apple, 4 grows 4 cells per apple, and 0 never grows. The new cells appear one per step as the tail stays in place. The score always goes up by exactly 1 per apple regardless of growth. The carry is computed in whole tenths so no rounding error builds up.
 6. **Max Snake Size:** the snake never grows beyond this many cells. Once it reaches the size, apples still score and still raise the tempo and the game goes on, but growth stops: pending growth and the carry are dropped and the tail moves normally. While growing, pending is never more than the room left under the max.
 7–8. **Ghost:** *Ghost Time* is how many steps a new obstacle is a harmless ghost before it turns solid; 0 means solid at once. *Ghost Time Half Trigger* is a comma-separated list of apple counts. For an obstacle placed on an apple, the ghost time is halved once for every list entry that is **less than** the apple count (so with 60, an obstacle placed on apple 61 or later is halved). A value listed twice halves twice (quartering), three times is an eighth, and so on. Each halving is rounded **up** to a whole step: 36 → 18 → 9 → 5 → 3, 12 → 6 → 3 → 2 → 1. A ghost time of 0 stays 0. The list always keeps at least one entry (an empty or unreadable entry is ignored and the previous list kept). Entries are order-independent; up to 10 entries are kept.
@@ -66,7 +75,9 @@ Every "Trigger" is an apple count: the feature starts on the apple whose count r
 25. **Moving Wall Trigger:** from this apple on, every apple re-lays all wall segments (same count and sizes) at new random places.
 26–28. **Invisible hazards:** walls and bombs placed on or after the *Invisible Hazard Trigger* apple flash as ghosts, turn solid, then fade to fully invisible over *Invisible Hazard Timing* steps while staying solid. *Invisible Hazard Half Trigger* works exactly like the ghost one: the timing is halved (rounded up, minimum 1) once for each list entry less than the apple count the obstacle is placed on, and duplicates halve again. Enemies never become invisible.
 
-All six "Trigger" fields (Wall, Bomb, Wall Spawn, Enemy Spawn, Moving Wall, Invisible Hazard) now accept 1–1000, and the half-trigger lists accept 1–1000 per entry.
+29–37. **Music:** one trigger per instrument layer, named for the instrument rather than a tier number: Hi-Hat, Melody, Snare, Fast Hi-Hat, Arpeggio, Bass Pulse, Harmony, Counter-Melody and Drum Fill. A layer plays once the apple count has reached its trigger (`apples >= trigger`); 0 means from the very first step. Triggers are independent and may be in any order (the snare may come before the hi-hat, the harmony before the melody, and so on); two layers may share a value. Values are whole numbers 0–1000. The defaults are 8, 16, 24 … 72 in the order above, which reproduces the old tiers (one every 8 apples). The kick and the quarter-note bass always play. Fast Hi-Hat, when active, plays the hi-hat on every sixteenth and replaces the eighth-note Hi-Hat pattern; Bass Pulse replaces the quarter-note bass pattern. Harmony is computed from the melody line a third above, and Counter-Melody from the same bar pattern, so each plays even when its Melody trigger has not been reached. A change takes effect at the next bar line, as before. The overall music tier number is gone.
+
+All six "Trigger" fields (Wall, Bomb, Wall Spawn, Enemy Spawn, Moving Wall, Invisible Hazard) accept 1–1000; the Music triggers accept 0–1000, and the half-trigger lists accept 1–1000 per entry.
 
 **The Medium preset keeps today's game.** It reproduces the current rules exactly, apart from these deliberate changes: the tempo now rises by 1 BPM on every apple instead of 4 on every 4th apple, halved values round up instead of to nearest, the snake is capped at 200 cells (the old game had no cap), the ghost time halves two more times at apples 181 and 241 (24, 12, 6, 3, 2 instead of stopping at 6), the Wall Spawn Max counts spawned wall cells only (so the total can reach 92 including the first 12 cells), bombs now also fade from apple 100, and the fade takes 16 steps instead of 40.
 
@@ -76,7 +87,7 @@ All six "Trigger" fields (Wall, Bomb, Wall Spawn, Enemy Spawn, Moving Wall, Invi
 - The old single saved best score becomes Medium's best the first time the new version loads (if Medium has none yet).
 
 **The menu**
-- A "Difficulty: Medium" button in the header opens a dialog with a difficulty selector and all 28 settings, grouped under headings (Board, BPM, Growth, Ghost, Walls, Bombs, Spawning walls, Enemies, Effects), each with its label and allowed range.
+- A "Difficulty: Medium" button in the header opens a dialog with a difficulty selector and all 37 settings, grouped under headings (Board, BPM, Growth, Ghost, Walls, Bombs, Spawning walls, Enemies, Effects, Music), each with its label and allowed range.
 - For Easy, Medium and Hard every field shows that preset's value and is locked (read-only). Only Custom fields are editable.
 - List fields (the two half triggers) are typed as comma-separated numbers; entries are trimmed, each clamped to 1–1000 and rounded to a whole number, non-numbers dropped, and the corrected list is shown back. If nothing valid remains the previous list is kept.
 - Custom values are corrected when you leave the field or press Enter: out-of-range or off-step values are corrected to the nearest allowed value (clamped and rounded to the step), and anything that is not a number reverts to the previous valid value.
@@ -120,7 +131,7 @@ None beyond the parent spec. Invalid stored settings are silently replaced, not 
 - The dialog and its controls are keyboard-operable, have accessible names, and return focus to the Difficulty button on close.
 
 ## Data Model
-- `settings`: a plain object with the 26 numeric fields above plus the two half-trigger lists (arrays of numbers), camelCase names, always complete and valid.
+- `settings`: a plain object with the 35 numeric fields above plus the two half-trigger lists (arrays of numbers), camelCase names, always complete and valid.
 - Presets: `easy`, `medium`, `hard` constants; `custom` is built from stored values.
 - Stored (localStorage): `snake.difficulty` (`easy|medium|hard|custom`), `snake.custom` (JSON of all the fields; an old save without the new fields or with the old speed field is filled field by field from Medium), `snake.highScore.easy|medium|hard` (non-negative integers). The legacy `snake.highScore` is read once as Medium's best.
 - The active `settings` live in the game state (`state.settings`); `state.growth` holds `{ carry, pending }` (carry in tenths; pending is cells still to grow).

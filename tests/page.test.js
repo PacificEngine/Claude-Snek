@@ -91,10 +91,10 @@ describe('difficulty menu markup', () => {
     expect(menu).toMatch(/inputMode|inputmode/);
     expect(menu).not.toContain('.pattern');
   });
-  it('groups the fields under the nine headings, each group contiguous in FIELDS order', () => {
+  it('groups the fields under the ten headings, each group contiguous in FIELDS order', () => {
     const groups = FIELDS.map((f) => f.group);
     const headings = groups.filter((g, i) => g !== groups[i - 1]);
-    expect(headings).toEqual(['Board', 'BPM', 'Growth', 'Ghost', 'Walls', 'Bombs', 'Spawning walls', 'Enemies', 'Effects']);
+    expect(headings).toEqual(['Board', 'BPM', 'Growth', 'Ghost', 'Walls', 'Bombs', 'Spawning walls', 'Enemies', 'Effects', 'Music']);
   });
   it('makes text inputs full width in the single-column layout', () => {
     const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');

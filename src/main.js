@@ -1,6 +1,6 @@
 import { createState, queueDirection, tick, togglePause } from './core/game.js';
-import { bpm, musicTier } from './core/pacing.js';
-import { createTierGate } from './core/tier-gate.js';
+import { bpm, activeLayers } from './core/pacing.js';
+import { createLayerGate } from './core/layer-gate.js';
 import { loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom } from './storage.js';
 import { settingsFor } from './core/difficulty.js';
 import { createMenu, difficultyLabel } from './menu.js';
@@ -28,13 +28,13 @@ let started = false;
 // Bumped whenever the beat stops, so steps already scheduled ahead are dropped.
 let epoch = 0;
 // New layers enter on the next bar line, not the moment an apple is eaten.
-const tierGate = createTierGate(() => musicTier(state.score));
+const layerGate = createLayerGate(() => activeLayers(state.score, state.settings));
 
 const conductor = createConductor({
   now: () => synth.now(),
   getBpm: () => bpm(state.score, state.settings),
   onStep(step, time, dt) {
-    synth.playStep(step, time, dt, tierGate.tierFor(step));
+    synth.playStep(step, time, dt, layerGate.layersFor(step));
     const scheduledIn = epoch;
     setTimeout(() => {
       if (scheduledIn === epoch) advance();

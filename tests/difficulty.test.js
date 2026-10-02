@@ -20,6 +20,9 @@ const EXPECTED = {
   enemyTrigger: [64, 64, 64], enemySize: [2, 3, 6], enemyRate: [5, 5, 5], enemyMax: [1, 1, 4],
   movingWallTrigger: [80, 80, 80], invisibleTrigger: [100, 100, 100], invisibleTiming: [20, 16, 8],
   invisibleHalves: [INVIS, INVIS, INVIS],
+  hatTrigger: [8, 8, 8], melodyTrigger: [16, 16, 16], snareTrigger: [24, 24, 24],
+  fastHatTrigger: [32, 32, 32], arpTrigger: [40, 40, 40], bassPulseTrigger: [48, 48, 48],
+  harmonyTrigger: [56, 56, 56], counterTrigger: [64, 64, 64], fillTrigger: [72, 72, 72],
 };
 
 const RANGES = {
@@ -34,6 +37,9 @@ const RANGES = {
   enemyTrigger: [1, 1000, 1], enemySize: [1, 10, 1], enemyRate: [1, 10, 1], enemyMax: [1, 5, 1],
   movingWallTrigger: [1, 1000, 1], invisibleTrigger: [1, 1000, 1], invisibleTiming: [1, 40, 1],
   invisibleHalves: [1, 1000, 1],
+  hatTrigger: [0, 1000, 1], melodyTrigger: [0, 1000, 1], snareTrigger: [0, 1000, 1],
+  fastHatTrigger: [0, 1000, 1], arpTrigger: [0, 1000, 1], bassPulseTrigger: [0, 1000, 1],
+  harmonyTrigger: [0, 1000, 1], counterTrigger: [0, 1000, 1], fillTrigger: [0, 1000, 1],
 };
 
 const GROUPS = [
@@ -44,14 +50,15 @@ const GROUPS = [
   ['Spawning walls', ['wallSpawnTrigger', 'wallSpawnSize', 'wallSpawnRate', 'wallSpawnCount', 'wallSpawnMax']],
   ['Enemies', ['enemyTrigger', 'enemySize', 'enemyRate', 'enemyMax']],
   ['Effects', ['movingWallTrigger', 'invisibleTrigger', 'invisibleTiming', 'invisibleHalves']],
+  ['Music', ['hatTrigger', 'melodyTrigger', 'snareTrigger', 'fastHatTrigger', 'arpTrigger', 'bassPulseTrigger', 'harmonyTrigger', 'counterTrigger', 'fillTrigger']],
 ];
 
 describe('field table', () => {
-  it('has the 28 fields in spec order: 26 numeric and 2 list', () => {
-    expect(FIELDS).toHaveLength(28);
+  it('has the 37 fields in spec order: 35 numeric and 2 list', () => {
+    expect(FIELDS).toHaveLength(37);
     expect(FIELDS.map((f) => f.key)).toEqual(Object.keys(EXPECTED));
     expect(FIELDS.filter((f) => f.type === 'list').map((f) => f.key)).toEqual(['ghostHalves', 'invisibleHalves']);
-    expect(FIELDS.filter((f) => f.type !== 'list')).toHaveLength(26);
+    expect(FIELDS.filter((f) => f.type !== 'list')).toHaveLength(35);
   });
   it('has every range and step from the spec', () => {
     expect(Object.fromEntries(FIELDS.map((f) => [f.key, [f.min, f.max, f.step]]))).toEqual(RANGES);
@@ -158,6 +165,25 @@ describe('clampField for list fields', () => {
   });
   it('formats a list for the menu', () => {
     expect(formatList([60, 120, 180])).toBe('60, 120, 180');
+  });
+});
+
+describe('music trigger fields', () => {
+  const triggers = FIELDS.filter((f) => f.group === 'Music');
+  it('accept 0 and 1000, clamp 1001 down and -5 up', () => {
+    for (const f of triggers) {
+      expect(clampField(f, 0)).toBe(0);
+      expect(clampField(f, 1000)).toBe(1000);
+      expect(clampField(f, 1001)).toBe(1000);
+      expect(clampField(f, -5)).toBe(0);
+    }
+  });
+  it('fill from medium when an old save lacks them', () => {
+    const s = sanitize({ gridSize: 30 });
+    for (const f of triggers) expect(s[f.key]).toBe(PRESETS.medium[f.key]);
+  });
+  it('keep 0 rather than falling back to the default', () => {
+    expect(sanitize({ fillTrigger: 0 }).fillTrigger).toBe(0);
   });
 });
 

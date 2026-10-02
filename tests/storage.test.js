@@ -106,7 +106,7 @@ describe('custom settings', () => {
     const stored = JSON.parse(s.data['snake.custom']);
     expect(stored.gridSize).toBe(50);
     expect(stored).not.toHaveProperty('junk');
-    expect(Object.keys(stored)).toHaveLength(28);
+    expect(Object.keys(stored)).toHaveLength(37);
   });
   it('replaces bad fields with medium defaults and ignores junk', () => {
     const bad = fakeStorage({ 'snake.custom': JSON.stringify({ gridSize: 9999, bpmScale: 'x', growth: 2 }) });

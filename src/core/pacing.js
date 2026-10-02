@@ -1,7 +1,5 @@
 import { PRESETS } from './difficulty.js';
 
-const APPLES_PER_TIER = 8;
-const MAX_TIER = 10;
 const STEPS_PER_BEAT = 4; // one step per sixteenth note
 
 // Tempo after `apples` apples: starts at initialBpm, moves bpmScale per apple toward finalBpm and stops there.
@@ -11,7 +9,21 @@ export const bpm = (apples, { initialBpm, finalBpm, bpmScale } = PRESETS.medium)
   return Math.round(value * 10000) / 10000;
 };
 
-export const musicTier = (apples) =>
-  Math.min(MAX_TIER, Math.floor(Math.max(0, apples) / APPLES_PER_TIER));
+// Which setting holds the apple count at which each music layer enters.
+const LAYER_TRIGGERS = {
+  hat: 'hatTrigger',
+  melody: 'melodyTrigger',
+  snare: 'snareTrigger',
+  sixteenthHat: 'fastHatTrigger',
+  arp: 'arpTrigger',
+  bassPulse: 'bassPulseTrigger',
+  harmony: 'harmonyTrigger',
+  counter: 'counterTrigger',
+  fill: 'fillTrigger',
+};
+
+// Each music layer is active once the apples eaten reach its own trigger (0 means from the start).
+export const activeLayers = (apples, settings = PRESETS.medium) =>
+  Object.fromEntries(Object.entries(LAYER_TRIGGERS).map(([layer, key]) => [layer, apples >= settings[key]]));
 
 export const stepSeconds = (beatsPerMinute) => 60 / beatsPerMinute / STEPS_PER_BEAT;

@@ -34,10 +34,23 @@ export const FIELDS = [
   f('invisibleTrigger', 'Invisible Hazard Trigger', 'Effects', 1, 1000),
   f('invisibleTiming', 'Invisible Hazard Timing', 'Effects', 1, 40),
   list('invisibleHalves', 'Invisible Hazard Half Trigger', 'Effects'),
+  f('hatTrigger', 'Hi-Hat Trigger', 'Music', 0, 1000),
+  f('melodyTrigger', 'Melody Trigger', 'Music', 0, 1000),
+  f('snareTrigger', 'Snare Trigger', 'Music', 0, 1000),
+  f('fastHatTrigger', 'Fast Hi-Hat Trigger', 'Music', 0, 1000),
+  f('arpTrigger', 'Arpeggio Trigger', 'Music', 0, 1000),
+  f('bassPulseTrigger', 'Bass Pulse Trigger', 'Music', 0, 1000),
+  f('harmonyTrigger', 'Harmony Trigger', 'Music', 0, 1000),
+  f('counterTrigger', 'Counter-Melody Trigger', 'Music', 0, 1000),
+  f('fillTrigger', 'Drum Fill Trigger', 'Music', 0, 1000),
 ];
 
 const GHOST_HALVES = Object.freeze([60, 120, 180, 240]);
 const INVISIBLE_HALVES = Object.freeze([200, 400, 600, 800]);
+const MUSIC = {
+  hatTrigger: 8, melodyTrigger: 16, snareTrigger: 24, fastHatTrigger: 32, arpTrigger: 40,
+  bassPulseTrigger: 48, harmonyTrigger: 56, counterTrigger: 64, fillTrigger: 72,
+};
 
 export const PRESETS = Object.freeze({
   easy: Object.freeze({
@@ -48,6 +61,7 @@ export const PRESETS = Object.freeze({
     wallSpawnTrigger: 48, wallSpawnSize: 1, wallSpawnRate: 2, wallSpawnCount: 1, wallSpawnMax: 40,
     enemyTrigger: 64, enemySize: 2, enemyRate: 5, enemyMax: 1,
     movingWallTrigger: 80, invisibleTrigger: 100, invisibleTiming: 20, invisibleHalves: INVISIBLE_HALVES,
+    ...MUSIC,
   }),
   medium: Object.freeze({
     gridSize: 20, initialBpm: 120, finalBpm: 200, bpmScale: 1, growth: 1, maxLength: 200,
@@ -57,6 +71,7 @@ export const PRESETS = Object.freeze({
     wallSpawnTrigger: 48, wallSpawnSize: 2, wallSpawnRate: 1, wallSpawnCount: 1, wallSpawnMax: 80,
     enemyTrigger: 64, enemySize: 3, enemyRate: 5, enemyMax: 1,
     movingWallTrigger: 80, invisibleTrigger: 100, invisibleTiming: 16, invisibleHalves: INVISIBLE_HALVES,
+    ...MUSIC,
   }),
   hard: Object.freeze({
     gridSize: 40, initialBpm: 144, finalBpm: 240, bpmScale: 1.2, growth: 2, maxLength: 800,
@@ -66,6 +81,7 @@ export const PRESETS = Object.freeze({
     wallSpawnTrigger: 48, wallSpawnSize: 4, wallSpawnRate: 1, wallSpawnCount: 2, wallSpawnMax: 200,
     enemyTrigger: 64, enemySize: 6, enemyRate: 5, enemyMax: 4,
     movingWallTrigger: 80, invisibleTrigger: 100, invisibleTiming: 8, invisibleHalves: INVISIBLE_HALVES,
+    ...MUSIC,
   }),
 });
 

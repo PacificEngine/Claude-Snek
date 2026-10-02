@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createSynth } from '../src/synth.js';
+import { layersForTier } from '../src/core/track.js';
 
 function makeFakeContextClass() {
   const log = { oscillators: [], noiseStarts: [], gains: [], contexts: [] };
@@ -58,7 +59,7 @@ describe('createSynth without Web Audio', () => {
     const synth = createSynth(null);
     expect(() => {
       synth.start();
-      synth.playStep(0, 0, 0.125, 0);
+      synth.playStep(0, 0, 0.125, layersForTier(0));
       synth.silence();
       synth.setMuted(true);
     }).not.toThrow();
@@ -98,7 +99,7 @@ describe('createSynth lifecycle', () => {
   it('plays nothing before it is started', () => {
     const { FakeAudioContext, log } = makeFakeContextClass();
     const synth = createSynth(FakeAudioContext);
-    synth.playStep(0, 0, 0.125, 0);
+    synth.playStep(0, 0, 0.125, layersForTier(0));
     expect(log.oscillators).toHaveLength(0);
   });
 });
@@ -106,7 +107,7 @@ describe('createSynth lifecycle', () => {
 describe('playStep', () => {
   it('plays kick, hat and bass on the downbeat of the intro, at the given time', () => {
     const { synth, log } = started();
-    synth.playStep(0, 1.5, 0.125, 1);
+    synth.playStep(0, 1.5, 0.125, layersForTier(1));
     expect(log.oscillators.map((o) => o.type)).toEqual(['sine', 'triangle']);
     expect(log.oscillators.every((o) => o.startTime === 1.5)).toBe(true);
     expect(log.noiseStarts).toEqual([1.5]);
@@ -114,21 +115,21 @@ describe('playStep', () => {
 
   it('plays only the hi-hat on an off-eighth drum step', () => {
     const { synth, log } = started();
-    synth.playStep(2, 0.25, 0.125, 1);
+    synth.playStep(2, 0.25, 0.125, layersForTier(1));
     expect(log.oscillators).toHaveLength(0);
     expect(log.noiseStarts).toEqual([0.25]);
   });
 
   it('plays nothing on an odd sixteenth', () => {
     const { synth, log } = started();
-    synth.playStep(1, 0.125, 0.125, 1);
+    synth.playStep(1, 0.125, 0.125, layersForTier(1));
     expect(log.oscillators).toHaveLength(0);
     expect(log.noiseStarts).toHaveLength(0);
   });
 
   it('adds the melody when the verse starts (A4 = 440 Hz, bass A2 = 110 Hz)', () => {
     const { synth, log } = started();
-    synth.playStep(64, 0, 0.125, 2);
+    synth.playStep(64, 0, 0.125, layersForTier(2));
     expect(log.oscillators.map((o) => o.type)).toEqual(['sine', 'triangle', 'square']);
     expect(log.oscillators[1].frequency.value).toBeCloseTo(110);
     expect(log.oscillators[2].frequency.value).toBeCloseTo(440);
@@ -164,37 +165,37 @@ describe('mute and silence', () => {
   });
 });
 
-describe('tiered layers', () => {
+describe('layers by tier', () => {
   it('plays only kick and bass on the downbeat at tier 0 (no hat)', () => {
     const { synth, log } = started();
-    synth.playStep(0, 0, 0.125, 0);
+    synth.playStep(0, 0, 0.125, layersForTier(0));
     expect(log.oscillators.map((o) => o.type)).toEqual(['sine', 'triangle']);
     expect(log.noiseStarts).toHaveLength(0);
   });
 
   it('adds a snare burst on beat 2 from tier 3 (snare then hat)', () => {
     const { synth, log } = started();
-    synth.playStep(4, 0.5, 0.125, 3);
+    synth.playStep(4, 0.5, 0.125, layersForTier(3));
     expect(log.noiseStarts).toEqual([0.5, 0.5]);
     expect(log.oscillators.map((o) => o.type)).toEqual(['sine', 'triangle']);
   });
 
   it('does not snare below tier 3', () => {
     const { synth, log } = started();
-    synth.playStep(4, 0.5, 0.125, 2);
+    synth.playStep(4, 0.5, 0.125, layersForTier(2));
     expect(log.noiseStarts).toEqual([0.5]);
   });
 
   it('adds an arpeggio tone from tier 5 (second arp note on step 1: C4 = 261.6 Hz)', () => {
     const { synth, log } = started();
-    synth.playStep(1, 0.1, 0.125, 5);
+    synth.playStep(1, 0.1, 0.125, layersForTier(5));
     expect(log.oscillators.map((o) => o.type)).toEqual(['square']);
     expect(log.oscillators[0].frequency.value).toBeCloseTo(261.63, 1);
   });
 
   it('voices every layer at tier 10 in a fixed order', () => {
     const { synth, log } = started();
-    synth.playStep(64, 0, 0.125, 10);
+    synth.playStep(64, 0, 0.125, layersForTier(10));
     expect(log.oscillators.map((o) => o.type)).toEqual([
       'sine', 'triangle', 'square', 'square', 'square', 'sawtooth',
     ]);
@@ -205,6 +206,20 @@ describe('tiered layers', () => {
     expect(hz[4]).toBeCloseTo(523.25, 1); // harmony C5
     expect(hz[5]).toBeCloseTo(880); // counter A5
     expect(log.noiseStarts).toEqual([0]);
+  });
+});
+
+describe('independent layers', () => {
+  it('plays a drum fill snare on step 60 with only the fill layer active', () => {
+    const { synth, log } = started();
+    synth.playStep(60, 0.5, 0.125, { fill: true });
+    expect(log.noiseStarts).toEqual([0.5]);
+  });
+
+  it('plays the fast hi-hat on an odd step without the hi-hat layer', () => {
+    const { synth, log } = started();
+    synth.playStep(1, 0.1, 0.125, { sixteenthHat: true });
+    expect(log.noiseStarts).toEqual([0.1]);
   });
 });
 
