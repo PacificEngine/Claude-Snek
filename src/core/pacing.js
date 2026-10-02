@@ -29,3 +29,6 @@ export const activeLayers = (apples, settings = withMusic(PRESETS.medium, DEFAUL
   Object.fromEntries(Object.entries(LAYER_TRIGGERS).map(([layer, key]) => [layer, apples >= settings[key]]));
 
 export const stepSeconds = (beatsPerMinute) => 60 / beatsPerMinute / STEPS_PER_BEAT;
+
+// How long one step may spend placing obstacles (see `tick`): half the step, so the beat keeps time, and at least 2 ms.
+export const placementBudgetMs = (beatsPerMinute) => Math.max(2, stepSeconds(beatsPerMinute) * 1000 * 0.5);

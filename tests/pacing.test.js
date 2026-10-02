@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bpm, activeLayers, stepSeconds } from '../src/core/pacing.js';
+import { bpm, activeLayers, stepSeconds, placementBudgetMs } from '../src/core/pacing.js';
 import { PRESETS, DEFAULT_MUSIC, withMusic } from '../src/core/difficulty.js';
 
 
@@ -116,5 +116,14 @@ describe('stepSeconds', () => {
   });
   it('shrinks as the tempo rises: 0.075s at 200 BPM', () => {
     expect(stepSeconds(200)).toBeCloseTo(0.075);
+  });
+});
+
+describe('placementBudgetMs', () => {
+  it('is half a step: 62.5 ms at 120 BPM', () => {
+    expect(placementBudgetMs(120)).toBeCloseTo(62.5);
+  });
+  it('never drops below 2 ms, however fast the tempo', () => {
+    expect(placementBudgetMs(100000)).toBe(2);
   });
 });

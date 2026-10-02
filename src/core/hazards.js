@@ -100,7 +100,9 @@ function tryPlace(world, makeCells, rng, solid) {
   const size = sizeOf(world);
   const head = snake[0];
   const lane = laneKeys(head, direction);
-  const taken = new Set([...snake.map(cellKey), ...blockedKeys(hazards)]);
+  // Built once per placement, not once per attempt: the hazards do not change while candidates are tried.
+  const hazardKeys = blockedKeys(hazards);
+  const taken = new Set([...snake.map(cellKey), ...hazardKeys]);
   if (food) taken.add(cellKey(food));
   const baseSolid = solid ? freeGridOfCells([...hazards.walls, ...hazards.bombs].flatMap((o) => o.cells), size) : null;
   const baseAll = solid && food ? freeGridOfCells(hazardCells(hazards), size) : null;
@@ -128,7 +130,8 @@ function tryPlace(world, makeCells, rng, solid) {
       if (connected ? cutsGrid(baseSolid, size, idx) : gridHasIslands(without(baseSolid, cells), size)) continue;
     }
     if (checkFood && peel(without(baseAll, cells), size)[foodAt]) continue;
-    const blocked = new Set([...blockedKeys(hazards), ...cells.map(cellKey)]);
+    const cellKeys = new Set(cells.map(cellKey));
+    const blocked = { has: (key) => hazardKeys.has(key) || cellKeys.has(key) };
     if (hasRoute(snake, blocked, food, size, world.pending ?? 0)) return cells;
   }
   return null;
@@ -141,82 +144,125 @@ export const placeCell = (world, rng) => tryPlace(world, singleCandidate(sizeOf(
 const spawnedWallCells = (h) =>
   h.walls.filter((w) => w.origin === 'spawn').reduce((total, w) => total + w.cells.length, 0);
 
-// Hazards after an apple is eaten. `world.food` is the newly placed food; `apples` is the score
-// after eating; `s` is the active settings. Existing hazards are not aged here.
-export function spawnForApple(world, hazards, rng, apples, s = MEDIUM) {
+// The obstacle work for one apple, as a cursor over its items. Plain data, so it can wait in the game state between
+// beats. Phases run in this order; each phase's item count is fixed when the phase starts (from the board then).
+export const PLACEMENT_PHASES = ['first', 'bombs', 'spawn', 'relay', 'respawn', 'topup'];
+
+export const startPlacement = (apples) => ({ apples, phase: PLACEMENT_PHASES[0], i: 0, count: null });
+
+const wallsSpawnOn = (apples, s) => apples >= s.wallSpawnTrigger && (apples - s.wallSpawnTrigger) % s.wallSpawnRate === 0;
+
+// How many items a phase has, from the board as it is when the phase starts.
+function phaseSize(phase, apples, h, s) {
+  switch (phase) {
+    case 'first': return apples === s.wallTrigger ? s.wallCount : 0;
+    case 'bombs': return bombCountFor(apples, s);
+    case 'spawn': return wallsSpawnOn(apples, s) ? s.wallSpawnCount : 0;
+    case 'relay': return apples >= s.movingWallTrigger ? h.walls.length : 0;
+    case 'respawn': return enemyTargetFor(apples, s) > 0 ? h.enemies.length : 0;
+    default: return enemyTargetFor(apples, s); // topup: up to the target count
+  }
+}
+
+// Is the item under the cursor real work? (A live enemy needs no respawn; spawned walls stop at their maximum.)
+function isItem(work, h, s) {
+  const { phase, i, count } = work;
+  if (phase === 'spawn') return i < count && spawnedWallCells(h) + s.wallSpawnSize <= s.wallSpawnMax;
+  if (phase === 'respawn') return i < count && h.enemies[i].status === 'dead';
+  if (phase === 'topup') return h.enemies.length < count;
+  return i < count;
+}
+
+// Moves the cursor onto the next real item, or returns null when the apple's work is done.
+function settle(work, h, s) {
+  let w = work;
+  while (w) {
+    if (w.count === null) {
+      w = { ...w, count: phaseSize(w.phase, w.apples, h, s) };
+      if (w.phase === 'bombs') w.old = h.bombs.length; // bombs up to here move; the rest are new
+    }
+    if (isItem(w, h, s)) return w;
+    const skippable = w.phase === 'respawn' && w.i < w.count;
+    if (skippable) w = { ...w, i: w.i + 1 };
+    else {
+      const next = PLACEMENT_PHASES[PLACEMENT_PHASES.indexOf(w.phase) + 1];
+      w = next ? { apples: w.apples, phase: next, i: 0, count: null } : null;
+    }
+  }
+  return null;
+}
+
+const without = (list, i) => list.filter((_, j) => j !== i);
+const replaceAt = (list, i, item) => list.map((x, j) => (j === i ? item : x));
+
+// Places the one item under the cursor. Each placement is checked against `world` (the live snake, direction, food,
+// size and pending growth) and the hazards as they are now; an item being moved keeps its old place until then.
+function placeItem(work, world, h, rng, s) {
+  const { apples, phase, i } = work;
   const telegraph = halveFor(s.ghostTime, apples, s.ghostHalves);
   const fadeSteps = Math.max(1, halveFor(s.invisibleTiming, apples, s.invisibleHalves));
   const fade = { fades: apples >= s.invisibleTrigger, fadeSteps };
-  let h = hazards;
-  const at = () => ({ ...world, hazards: h });
+  const on = (hazards) => ({ ...world, hazards });
   const addWall = (length, origin) => {
-    const cells = placeSegment(at(), length, rng);
-    if (cells) h = { ...h, walls: [...h.walls, { cells, age: 0, telegraph, origin, ...fade }] };
+    const cells = placeSegment(on(h), length, rng);
+    return cells ? { ...h, walls: [...h.walls, { cells, age: 0, telegraph, origin, ...fade }] } : h;
   };
+  const fresh = (cells) => ({ cells, age: 0, telegraph, status: 'ghost' });
 
-  if (apples === s.wallTrigger) {
-    for (let i = 0; i < s.wallCount; i++) addWall(s.wallSize, 'first');
-  }
-
-  const wanted = bombCountFor(apples, s);
-  if (wanted > 0) {
+  if (phase === 'first') return { h: addWall(s.wallSize, 'first') };
+  if (phase === 'spawn') return { h: addWall(s.wallSpawnSize, 'spawn') };
+  if (phase === 'bombs') {
     // Every bomb jumps on every apple, one at a time. A bomb that cannot be moved
     // keeps its old cell; a new bomb that cannot be placed is skipped (retried next apple).
-    const old = h.bombs;
-    const placed = [];
-    for (let i = 0; i < wanted; i++) {
-      const others = { ...h, bombs: [...placed, ...old.slice(i + 1)] };
-      const cells = placeCell({ ...world, hazards: others }, rng);
-      if (cells) placed.push({ cells, age: 0, telegraph, ...fade });
-      else if (old[i]) placed.push(old[i]);
-    }
-    h = { ...h, bombs: placed };
+    const moving = i < work.old;
+    const cells = placeCell(on({ ...h, bombs: moving ? without(h.bombs, i) : h.bombs }), rng);
+    const bomb = { cells, age: 0, telegraph, ...fade };
+    let bombs = h.bombs;
+    if (cells) bombs = moving ? replaceAt(bombs, i, bomb) : [...bombs, bomb];
+    if (i === work.count - 1) bombs = bombs.slice(0, work.count); // bombs beyond the count are dropped
+    return { h: { ...h, bombs } };
   }
-
-  if (apples >= s.wallSpawnTrigger && (apples - s.wallSpawnTrigger) % s.wallSpawnRate === 0) {
-    for (let i = 0; i < s.wallSpawnCount; i++) {
-      if (spawnedWallCells(h) + s.wallSpawnSize > s.wallSpawnMax) break;
-      addWall(s.wallSpawnSize, 'spawn');
-    }
-  }
-
-  if (apples >= s.movingWallTrigger) {
+  if (phase === 'relay') {
     // One wall at a time; a wall that cannot be re-laid keeps its old place.
-    const old = h.walls;
-    const placed = [];
-    old.forEach((wall, i) => {
-      const others = { ...h, walls: [...placed, ...old.slice(i + 1)] };
-      const cells = placeSegment({ ...world, hazards: others }, wall.cells.length, rng);
-      placed.push(cells ? { ...wall, cells, age: 0, telegraph, ...fade } : wall);
-    });
-    h = { ...h, walls: placed };
+    const wall = h.walls[i];
+    const cells = placeSegment(on({ ...h, walls: without(h.walls, i) }), wall.cells.length, rng);
+    return { h: cells ? { ...h, walls: replaceAt(h.walls, i, { ...wall, cells, age: 0, telegraph, ...fade }) } : h };
   }
-
-  const enemyTarget = enemyTargetFor(apples, s);
-  if (enemyTarget > 0) {
-    const fresh = (cells) => ({ cells, age: 0, telegraph, status: 'ghost' });
-    const old = h.enemies;
-    const placed = [];
-    old.forEach((enemy, i) => {
-      if (enemy.status !== 'dead') {
-        placed.push(enemy);
-        return;
-      }
-      // replace a dead enemy with a fresh ghost; keep it as an obstacle if no spot is found
-      const others = { ...h, enemies: [...placed, ...old.slice(i + 1)] };
-      const cells = placeSegment({ ...world, hazards: others }, s.enemySize, rng, false);
-      placed.push(cells ? fresh(cells) : enemy);
-    });
-    while (placed.length < enemyTarget) {
-      const cells = placeSegment({ ...world, hazards: { ...h, enemies: placed } }, s.enemySize, rng, false);
-      if (!cells) break;
-      placed.push(fresh(cells));
-    }
-    h = { ...h, enemies: placed };
+  if (phase === 'respawn') {
+    // replace a dead enemy with a fresh ghost; keep it as an obstacle if no spot is found
+    const cells = placeSegment(on({ ...h, enemies: without(h.enemies, i) }), s.enemySize, rng, false);
+    return { h: cells ? { ...h, enemies: replaceAt(h.enemies, i, fresh(cells)) } : h };
   }
-
-  return h;
+  // topup: add one enemy; when none fits, stop topping up for this apple
+  const cells = placeSegment(on(h), s.enemySize, rng, false);
+  return cells ? { h: { ...h, enemies: [...h.enemies, fresh(cells)] } } : { h, stop: true };
 }
+
+// Places the next item of `work` and moves the cursor on. Returns the new hazards and the work left (null when done).
+export function placeNext(work, world, hazards, rng, s = MEDIUM) {
+  const current = settle(work, hazards, s);
+  if (!current) return { work: null, hazards };
+  const { h, stop } = placeItem(current, world, hazards, rng, s);
+  // topping up is the last phase, so a stop there ends the work
+  return { work: stop ? null : settle({ ...current, i: current.i + 1 }, h, s), hazards: h };
+}
+
+// Places items of `work` one at a time until `now() - start` reaches `budgetMs` (at least one item when any is
+// waiting). With no budget everything is placed. `now` is injected so the core never reads a clock itself.
+export function placeWithin(work, world, hazards, rng, s = MEDIUM, { now = () => 0, budgetMs = Infinity } = {}) {
+  let next = { work, hazards };
+  if (!work) return next;
+  const start = now();
+  do {
+    next = placeNext(next.work, world, next.hazards, rng, s);
+  } while (next.work && now() - start < budgetMs);
+  return next;
+}
+
+// Hazards after an apple is eaten, all placed at once. `world.food` is the newly placed food; `apples` is the score
+// after eating; `s` is the active settings. Existing hazards are not aged here.
+export const spawnForApple = (world, hazards, rng, apples, s = MEDIUM) =>
+  placeWithin(startPlacement(apples), world, hazards, rng, s).hazards;
 
 function stepEnemy(enemy, { snake, food, others, size = GRID_SIZE, pending = 0 }, rng) {
   if (enemy.status === 'dead') return enemy;

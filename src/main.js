@@ -1,5 +1,5 @@
 import { createState, queueDirection, tick, togglePause } from './core/game.js';
-import { bpm, activeLayers } from './core/pacing.js';
+import { bpm, activeLayers, placementBudgetMs } from './core/pacing.js';
 import { createLayerGate } from './core/layer-gate.js';
 import { loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, loadMusicRandom, saveMusicRandom, SCORED } from './storage.js';
 import { settingsFor, settingsWithMusic, musicForGame } from './core/difficulty.js';
@@ -76,9 +76,10 @@ function stopBeat() {
   synth.silence();
 }
 
-// One snake step, applied on the beat.
+// One snake step, applied on the beat. Obstacle placement after an apple may use half the step (placementBudgetMs);
+// whatever does not fit carries over to the next steps, so a big apple step never stalls the beat.
 function advance() {
-  state = tick(state, Math.random);
+  state = tick(state, Math.random, { now: () => performance.now(), budgetMs: placementBudgetMs(bpm(state.score, state.settings)) });
   if (SCORED.includes(difficulty) && state.score > best) {
     best = state.score;
     saveBest(difficulty, best);

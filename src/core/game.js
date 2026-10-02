@@ -3,7 +3,7 @@ import { VECTORS, OPPOSITE, cellKey, sameCell, inBounds, allCells } from './grid
 import { reachable } from './pathing.js';
 import { deadEndCells } from './shape.js';
 import { PRESETS } from './difficulty.js';
-import { emptyHazards, hitsHazard, stepHazards, spawnForApple, blockedKeys } from './hazards.js';
+import { emptyHazards, hitsHazard, stepHazards, startPlacement, placeWithin, blockedKeys } from './hazards.js';
 
 const MAX_QUEUED = 2;
 
@@ -33,6 +33,8 @@ export function createState(rng, settings = PRESETS.medium) {
     hazards: emptyHazards(),
     settings,
     growth: { carry: 0, pending: 0 },
+    // Obstacle work for the last apple that has not been placed yet (see `tick`).
+    placement: null,
     status: 'playing',
   };
 }
@@ -57,7 +59,10 @@ function growthAfterApple(growth, growthSetting) {
   return { carry: carry - cells * 10, cells };
 }
 
-export function tick(state, rng) {
+// One game step. `opts.budgetMs` with an injected clock `opts.now` (ms) spreads an apple's obstacle placement over
+// the following steps: after the step, waiting items are placed one at a time until the budget is used (at least one
+// per step). Without a budget everything is placed in the apple step.
+export function tick(state, rng, opts = {}) {
   if (state.status !== 'playing') return state;
   const settings = state.settings ?? PRESETS.medium;
   const size = settings.gridSize;
@@ -87,13 +92,18 @@ export function tick(state, rng) {
     return { ...state, direction, queued, hazards, status: 'gameOver' };
   }
   const snake = [newHead, ...bodyAfterMove];
-  let nextHazards = stepHazards(hazards, { snake, food: state.food, size, pending: growth.pending }, rng);
-  if (!eating) return { ...state, snake, direction, queued, hazards: nextHazards, growth };
+  const stepped = stepHazards(hazards, { snake, food: state.food, size, pending: growth.pending }, rng);
+  const place = (work, food) =>
+    placeWithin(work, { snake, direction, food, size, pending: growth.pending }, stepped, rng, settings, opts);
+  if (!eating) {
+    const placed = place(state.placement ?? null, state.food);
+    return { ...state, snake, direction, queued, hazards: placed.hazards, placement: placed.work, growth };
+  }
 
   const score = state.score + 1;
-  // Food first, on a reachable cell; then hazards, checked against that food.
-  const food = placeFood(snake, rng, blockedKeys(nextHazards), size, growth.pending);
-  nextHazards = spawnForApple({ snake, direction, food, size, pending: growth.pending }, nextHazards, rng, score, settings);
+  // Food first, on a reachable cell; then hazards, checked against that food. A new apple replaces waiting work.
+  const food = placeFood(snake, rng, blockedKeys(stepped), size, growth.pending);
+  const placed = place(startPlacement(score), food);
   return {
     ...state,
     snake,
@@ -101,7 +111,8 @@ export function tick(state, rng) {
     queued,
     food,
     score,
-    hazards: nextHazards,
+    hazards: placed.hazards,
+    placement: placed.work,
     growth,
     status: food === null ? 'gameOver' : 'playing',
   };
