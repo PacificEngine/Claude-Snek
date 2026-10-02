@@ -229,6 +229,25 @@ describe('music settings in the menu', () => {
   });
 });
 
+describe('Reset Custom to default button', () => {
+  const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
+  it('has a button whose accessible name contains its visible text', () => {
+    expect(menu).toContain("resetCustomBtn.textContent = 'Reset to default'");
+    expect(menu).toContain("'Reset to default, custom settings'");
+    expect(menu).toContain('noteEl.after(resetCustomBtn)');
+  });
+  it('restores the Medium values into the Custom draft only, then refreshes', () => {
+    expect(menu).toMatch(/resetCustomBtn\.addEventListener\('click', \(\) => \{\s*draftCustom = copySettings\(PRESETS\.medium\);\s*refresh\(\);/);
+  });
+  it('shows and enables it only while Custom is selected', () => {
+    expect(menu).toContain("resetCustomBtn.hidden = draftDifficulty !== 'custom'");
+    expect(menu).toContain("resetCustomBtn.disabled = draftDifficulty !== 'custom'");
+    expect(css).toMatch(/\.reset-custom\[hidden\][^{]*\{[^}]*display:\s*none/);
+    expect(css).toMatch(/\.reset-custom[^{]*\{[^}]*min-height:\s*44px/);
+  });
+});
+
 describe('Reroll and Randomize buttons', () => {
   const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');

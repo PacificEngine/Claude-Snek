@@ -102,6 +102,7 @@ All six "Trigger" fields (Wall, Bomb, Wall Spawn, Enemy Spawn, Moving Wall, Invi
 
 **The menu**
 - A "Difficulty: Medium" button in the header opens a dialog with a difficulty selector and all 39 settings, grouped under headings (Board, BPM, Growth, Ghost, Walls, Bombs, Spawning walls, Enemies, Effects, Music), each with its label and allowed range.
+- While Custom is selected, a **Reset to default** button (in the same place as Random's Reroll, under the note) sets every Custom value back to the Medium preset in the dialog; Apply keeps it, Cancel discards it. It is hidden and disabled for every other difficulty and never touches the Music settings.
 - The Music section is always editable and has a **Reset to default** button that restores the eleven defaults (0, 0, 8, 16 … 72) in the dialog; like the other edits it is kept when you Apply (Cancel discards it). Music values are corrected like Custom ones (whole numbers 0–1000, on leaving the field or pressing Enter). For every other section in Easy, Medium, Hard, Frantic and Random every field shows that preset's value and is locked (read-only). Only Custom fields are editable.
 - While Random is selected a **Reroll** button appears that draws a fresh roll (music included) to preview; Apply runs exactly the roll shown and Cancel discards it. It is hidden and disabled for every other difficulty.
 - The Music section also has a **Randomize** button that rolls new values for your own Music using Random's build-up rule. It is a draft until Apply (Cancel discards it), works under every difficulty except Random, where it is disabled because the fields show the locked roll.
@@ -119,7 +120,6 @@ All six "Trigger" fields (Wall, Bomb, Wall Spawn, Enemy Spawn, Moving Wall, Invi
 - Never trust stored settings without validating every field.
 
 ### Nice to Have
-- A "Reset Custom to Medium" button.
 - Showing each setting's preset value next to the Custom input.
 
 ## Technical Constraints

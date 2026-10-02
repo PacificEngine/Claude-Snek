@@ -120,6 +120,18 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
   });
   noteEl.after(rerollBtn);
 
+  // Custom only: puts every Custom value back to the Medium preset in the draft (Apply keeps it, Cancel discards it).
+  const resetCustomBtn = document.createElement('button');
+  resetCustomBtn.type = 'button';
+  resetCustomBtn.className = 'reset-custom';
+  resetCustomBtn.textContent = 'Reset to default';
+  resetCustomBtn.setAttribute('aria-label', 'Reset to default, custom settings');
+  resetCustomBtn.addEventListener('click', () => {
+    draftCustom = copySettings(PRESETS.medium);
+    refresh();
+  });
+  noteEl.after(resetCustomBtn);
+
   // Random shows its roll's music, locked; every other difficulty shows the player's own draft, editable.
   function showMusic() {
     const rolled = draftDifficulty === 'random';
@@ -151,6 +163,8 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
     showMusic();
     rerollBtn.hidden = draftDifficulty !== 'random';
     rerollBtn.disabled = draftDifficulty !== 'random';
+    resetCustomBtn.hidden = draftDifficulty !== 'custom';
+    resetCustomBtn.disabled = draftDifficulty !== 'custom';
     if (!locked) noteEl.textContent = 'Edit any value. It is adjusted to the nearest allowed value.';
     else if (draftDifficulty === 'random') noteEl.textContent = 'Random: every setting, Music included, changes each new game. Your own Music comes back when you choose another difficulty.';
     else noteEl.textContent = 'These values are locked. Choose Custom to edit them. Music is always editable.';
