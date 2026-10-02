@@ -173,6 +173,18 @@ describe('layers by tier', () => {
     expect(log.noiseStarts).toHaveLength(0);
   });
 
+  it('plays no kick before the kick layer is on, only the bass', () => {
+    const { synth, log } = started();
+    synth.playStep(0, 0, 0.125, { ...layersForTier(0), kick: false });
+    expect(log.oscillators.map((o) => o.type)).toEqual(['triangle']);
+  });
+
+  it('plays no bass before the bass layer is on, only the kick', () => {
+    const { synth, log } = started();
+    synth.playStep(0, 0, 0.125, { ...layersForTier(0), bass: false });
+    expect(log.oscillators.map((o) => o.type)).toEqual(['sine']);
+  });
+
   it('adds a snare burst on beat 2 from tier 3 (snare then hat)', () => {
     const { synth, log } = started();
     synth.playStep(4, 0.5, 0.125, layersForTier(3));

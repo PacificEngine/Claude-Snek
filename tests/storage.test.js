@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
-  loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, SCORED,
+  loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, SCORED,
 } from '../src/storage.js';
-import { PRESETS } from '../src/core/difficulty.js';
+import { PRESETS, DEFAULT_MUSIC } from '../src/core/difficulty.js';
 
 const fakeStorage = (initial = {}) => {
   const data = { ...initial };
@@ -23,7 +23,23 @@ describe('best scores', () => {
     saveBest('medium', 12, s);
     saveBest('hard', 3, s);
     expect(s.data).toMatchObject({ 'snake.highScore.easy': '7', 'snake.highScore.medium': '12', 'snake.highScore.hard': '3' });
-    expect(SCORED.map((d) => loadBest(d, s))).toEqual([7, 12, 3]);
+    expect(['easy', 'medium', 'hard'].map((d) => loadBest(d, s))).toEqual([7, 12, 3]);
+  });
+  it('keeps frantic apart from the other bests under its own key', () => {
+    const s = fakeStorage();
+    saveBest('frantic', 9, s);
+    saveBest('hard', 4, s);
+    expect(s.data).toMatchObject({ 'snake.highScore.frantic': '9', 'snake.highScore.hard': '4' });
+    expect(loadBest('frantic', s)).toBe(9);
+    expect(loadBest('hard', s)).toBe(4);
+    expect(SCORED).toEqual(['easy', 'medium', 'hard', 'frantic']);
+  });
+  it('never reads or writes a random score', () => {
+    const s = fakeStorage({ 'snake.highScore.random': '99' });
+    saveBest('random', 5, s);
+    expect(loadBest('random', s)).toBe(0);
+    expect(s.data).toEqual({ 'snake.highScore.random': '99' });
+    expect(SCORED).not.toContain('random');
   });
   it('returns 0 when nothing is stored', () => {
     expect(loadBest('easy', fakeStorage())).toBe(0);
@@ -77,6 +93,11 @@ describe('chosen difficulty', () => {
     expect(loadDifficulty(s)).toBe('hard');
     saveDifficulty('custom', s);
     expect(loadDifficulty(s)).toBe('custom');
+    saveDifficulty('frantic', s);
+    expect(loadDifficulty(s)).toBe('frantic');
+    saveDifficulty('random', s);
+    expect(loadDifficulty(s)).toBe('random');
+    expect(s.data).toEqual({ 'snake.difficulty': 'random' });
   });
   it('defaults to medium for missing or invalid values', () => {
     expect(loadDifficulty(fakeStorage())).toBe('medium');
@@ -106,7 +127,7 @@ describe('custom settings', () => {
     const stored = JSON.parse(s.data['snake.custom']);
     expect(stored.gridSize).toBe(50);
     expect(stored).not.toHaveProperty('junk');
-    expect(Object.keys(stored)).toHaveLength(37);
+    expect(Object.keys(stored)).toHaveLength(28);
   });
   it('replaces bad fields with medium defaults and ignores junk', () => {
     const bad = fakeStorage({ 'snake.custom': JSON.stringify({ gridSize: 9999, bpmScale: 'x', growth: 2 }) });
@@ -138,6 +159,55 @@ describe('custom settings', () => {
     const broken = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); } };
     expect(loadCustom(broken)).toEqual(PRESETS.medium);
     expect(() => saveCustom(PRESETS.medium, broken)).not.toThrow();
+    expect(spy).toHaveBeenCalled();
+  });
+});
+
+describe('custom settings and music', () => {
+  it('does not store music keys with the custom settings', () => {
+    const s = fakeStorage();
+    saveCustom({ ...PRESETS.medium, kickTrigger: 5, snareTrigger: 9 }, s);
+    expect(Object.keys(JSON.parse(s.data['snake.custom'])).some((k) => k in DEFAULT_MUSIC)).toBe(false);
+  });
+  it('ignores music keys in an old saved custom', () => {
+    const old = fakeStorage({ 'snake.custom': JSON.stringify({ gridSize: 25, kickTrigger: 7, fillTrigger: 9 }) });
+    const loaded = loadCustom(old);
+    expect(loaded.gridSize).toBe(25);
+    expect(loaded).not.toHaveProperty('kickTrigger');
+    expect(loaded).not.toHaveProperty('fillTrigger');
+  });
+});
+
+describe('music triggers', () => {
+  it('round-trips under their own key', () => {
+    const s = fakeStorage();
+    saveMusic({ ...DEFAULT_MUSIC, snareTrigger: 5, kickTrigger: 0 }, s);
+    expect(Object.keys(s.data)).toEqual(['snake.music']);
+    expect(loadMusic(s)).toEqual({ ...DEFAULT_MUSIC, snareTrigger: 5 });
+  });
+  it('defaults when nothing or junk is stored', () => {
+    expect(loadMusic(fakeStorage())).toEqual(DEFAULT_MUSIC);
+    expect(loadMusic(fakeStorage({ 'snake.music': 'not json' }))).toEqual(DEFAULT_MUSIC);
+    expect(loadMusic(fakeStorage({ 'snake.music': '[1,2]' }))).toEqual(DEFAULT_MUSIC);
+    expect(loadMusic(fakeStorage({ 'snake.music': 'null' }))).toEqual(DEFAULT_MUSIC);
+  });
+  it('validates field by field, clamping 1001 and replacing bad values', () => {
+    const s = fakeStorage({ 'snake.music': JSON.stringify({ fillTrigger: 1001, hatTrigger: 'x', kickTrigger: -3, junk: 1 }) });
+    expect(loadMusic(s)).toEqual({ ...DEFAULT_MUSIC, fillTrigger: 1000, kickTrigger: 0 });
+  });
+  it('saves the sanitized copy', () => {
+    const s = fakeStorage();
+    saveMusic({ fillTrigger: 5000, junk: 1 }, s);
+    const stored = JSON.parse(s.data['snake.music']);
+    expect(stored.fillTrigger).toBe(1000);
+    expect(stored).not.toHaveProperty('junk');
+    expect(Object.keys(stored)).toHaveLength(11);
+  });
+  it('survives broken storage', () => {
+    const spy = quiet();
+    const broken = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); } };
+    expect(loadMusic(broken)).toEqual(DEFAULT_MUSIC);
+    expect(() => saveMusic(DEFAULT_MUSIC, broken)).not.toThrow();
     expect(spy).toHaveBeenCalled();
   });
 });

@@ -169,11 +169,11 @@ describe('layers only accumulate', () => {
     }
   });
   it('lists the layers in the order they enter by default', () => {
-    expect(LAYERS).toEqual(['hat', 'melody', 'snare', 'sixteenthHat', 'arp', 'bassPulse', 'harmony', 'counter', 'fill']);
+    expect(LAYERS).toEqual(['kick', 'bass', 'hat', 'melody', 'snare', 'sixteenthHat', 'arp', 'bassPulse', 'harmony', 'counter', 'fill']);
   });
-  it('switches on the first n layers for tier n', () => {
-    expect(layersForTier(0)).toEqual(only());
-    expect(layersForTier(2)).toEqual(only('hat', 'melody'));
+  it('switches on the first n layers after kick and bass for tier n, kick and bass always on', () => {
+    expect(layersForTier(0)).toEqual(only('kick', 'bass'));
+    expect(layersForTier(2)).toEqual(only('kick', 'bass', 'hat', 'melody'));
     expect(layersForTier(10)).toEqual(only(...LAYERS));
   });
 });
@@ -208,7 +208,18 @@ describe('independent layers', () => {
     expect(steps(only('melody')).some((e) => e.hat)).toBe(false);
   });
   it('pulses the bass on eighths with the bassPulse layer alone, on quarters otherwise', () => {
-    expect(eventsFor(2, only('bassPulse')).bass).toBe(57);
-    expect(eventsFor(2, only()).bass).toBeNull();
+    expect(eventsFor(2, only('bass', 'bassPulse')).bass).toBe(57);
+    expect(eventsFor(2, only('bass')).bass).toBeNull();
+    expect(eventsFor(4, only('bass')).bass).toBe(45);
+  });
+  it('plays the kick only when the kick layer is on', () => {
+    expect(steps(only('bass')).some((e) => e.kick)).toBe(false);
+    steps(only('kick')).forEach((e, i) => expect(e.kick).toBe(i % 4 === 0));
+  });
+  it('plays no bass until the bass layer is on', () => {
+    expect(steps(only('kick')).some((e) => e.bass !== null)).toBe(false);
+  });
+  it('does not sound the bass pulse without the bass layer', () => {
+    expect(steps(only('bassPulse')).some((e) => e.bass !== null)).toBe(false);
   });
 });

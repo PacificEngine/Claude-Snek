@@ -1,8 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import {
-  DIFFICULTIES, FIELDS, PRESETS, clampField, sanitize, settingsFor, applyEdit,
-  describeRange, formatList, isDifficulty, DEFAULT_DIFFICULTY,
+  DIFFICULTIES, FIELDS, MUSIC_FIELDS, DEFAULT_MUSIC, sanitizeMusic, withMusic, settingsWithMusic, PRESETS, clampField, sanitize, settingsFor, applyEdit,
+  describeRange, formatList, isDifficulty, DEFAULT_DIFFICULTY, randomSettings,
 } from '../src/core/difficulty.js';
+
+const seededRng = (seed) => {
+  let a = seed;
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
 
 const field = (key) => FIELDS.find((f) => f.key === key);
 
@@ -20,9 +30,17 @@ const EXPECTED = {
   enemyTrigger: [64, 64, 64], enemySize: [2, 3, 6], enemyRate: [5, 5, 5], enemyMax: [1, 1, 4],
   movingWallTrigger: [80, 80, 80], invisibleTrigger: [100, 100, 100], invisibleTiming: [20, 16, 8],
   invisibleHalves: [INVIS, INVIS, INVIS],
-  hatTrigger: [8, 8, 8], melodyTrigger: [16, 16, 16], snareTrigger: [24, 24, 24],
-  fastHatTrigger: [32, 32, 32], arpTrigger: [40, 40, 40], bassPulseTrigger: [48, 48, 48],
-  harmonyTrigger: [56, 56, 56], counterTrigger: [64, 64, 64], fillTrigger: [72, 72, 72],
+};
+
+// The Frantic column of the spec table.
+const FRANTIC = {
+  gridSize: 50, initialBpm: 160, finalBpm: 280, bpmScale: 1.4, growth: 2, maxLength: 1000,
+  ghostTime: 6, ghostHalves: GHOST,
+  wallTrigger: 16, wallSize: 10, wallCount: 20,
+  bombTrigger: 32, bombRate: 1, bombCount: 5, bombMax: 30,
+  wallSpawnTrigger: 48, wallSpawnSize: 6, wallSpawnRate: 1, wallSpawnCount: 4, wallSpawnMax: 1000,
+  enemyTrigger: 64, enemySize: 10, enemyRate: 3, enemyMax: 8,
+  movingWallTrigger: 80, invisibleTrigger: 100, invisibleTiming: 8, invisibleHalves: INVIS,
 };
 
 const RANGES = {
@@ -31,16 +49,16 @@ const RANGES = {
   growth: [0, 4, 0.1], maxLength: [3, 1000, 1],
   ghostTime: [0, 40, 1], ghostHalves: [1, 1000, 1],
   wallTrigger: [1, 1000, 1], wallSize: [1, 10, 1], wallCount: [1, 20, 1],
-  bombTrigger: [1, 1000, 1], bombRate: [1, 10, 1], bombCount: [1, 5, 1], bombMax: [1, 25, 1],
+  bombTrigger: [1, 1000, 1], bombRate: [1, 10, 1], bombCount: [1, 5, 1], bombMax: [1, 50, 1],
   wallSpawnTrigger: [1, 1000, 1], wallSpawnSize: [1, 10, 1], wallSpawnRate: [1, 10, 1],
-  wallSpawnCount: [1, 5, 1], wallSpawnMax: [10, 250, 1],
-  enemyTrigger: [1, 1000, 1], enemySize: [1, 10, 1], enemyRate: [1, 10, 1], enemyMax: [1, 5, 1],
+  wallSpawnCount: [1, 5, 1], wallSpawnMax: [10, 1000, 1],
+  enemyTrigger: [1, 1000, 1], enemySize: [1, 25, 1], enemyRate: [1, 10, 1], enemyMax: [1, 10, 1],
   movingWallTrigger: [1, 1000, 1], invisibleTrigger: [1, 1000, 1], invisibleTiming: [1, 40, 1],
   invisibleHalves: [1, 1000, 1],
-  hatTrigger: [0, 1000, 1], melodyTrigger: [0, 1000, 1], snareTrigger: [0, 1000, 1],
-  fastHatTrigger: [0, 1000, 1], arpTrigger: [0, 1000, 1], bassPulseTrigger: [0, 1000, 1],
-  harmonyTrigger: [0, 1000, 1], counterTrigger: [0, 1000, 1], fillTrigger: [0, 1000, 1],
 };
+
+const MUSIC_KEYS = ['kickTrigger', 'bassTrigger', 'hatTrigger', 'melodyTrigger', 'snareTrigger', 'fastHatTrigger', 'arpTrigger', 'bassPulseTrigger', 'harmonyTrigger', 'counterTrigger', 'fillTrigger'];
+const MUSIC_RANGES = Object.fromEntries(MUSIC_KEYS.map((k) => [k, [0, 1000, 1]]));
 
 const GROUPS = [
   ['Board', ['gridSize']], ['BPM', ['initialBpm', 'finalBpm', 'bpmScale']],
@@ -50,18 +68,25 @@ const GROUPS = [
   ['Spawning walls', ['wallSpawnTrigger', 'wallSpawnSize', 'wallSpawnRate', 'wallSpawnCount', 'wallSpawnMax']],
   ['Enemies', ['enemyTrigger', 'enemySize', 'enemyRate', 'enemyMax']],
   ['Effects', ['movingWallTrigger', 'invisibleTrigger', 'invisibleTiming', 'invisibleHalves']],
-  ['Music', ['hatTrigger', 'melodyTrigger', 'snareTrigger', 'fastHatTrigger', 'arpTrigger', 'bassPulseTrigger', 'harmonyTrigger', 'counterTrigger', 'fillTrigger']],
 ];
 
 describe('field table', () => {
-  it('has the 37 fields in spec order: 35 numeric and 2 list', () => {
-    expect(FIELDS).toHaveLength(37);
+  it('has the 28 difficulty fields in spec order: 26 numeric and 2 list', () => {
+    expect(FIELDS).toHaveLength(28);
     expect(FIELDS.map((f) => f.key)).toEqual(Object.keys(EXPECTED));
     expect(FIELDS.filter((f) => f.type === 'list').map((f) => f.key)).toEqual(['ghostHalves', 'invisibleHalves']);
-    expect(FIELDS.filter((f) => f.type !== 'list')).toHaveLength(35);
+    expect(FIELDS.filter((f) => f.type !== 'list')).toHaveLength(26);
   });
   it('has every range and step from the spec', () => {
     expect(Object.fromEntries(FIELDS.map((f) => [f.key, [f.min, f.max, f.step]]))).toEqual(RANGES);
+  });
+  it('keeps the eleven music triggers out of the difficulty fields, in their own list', () => {
+    expect(FIELDS.some((f) => f.group === 'Music')).toBe(false);
+    expect(MUSIC_FIELDS.map((f) => f.key)).toEqual(MUSIC_KEYS);
+    expect(MUSIC_FIELDS.every((f) => f.group === 'Music')).toBe(true);
+  });
+  it('has every music range and step from the spec', () => {
+    expect(Object.fromEntries(MUSIC_FIELDS.map((f) => [f.key, [f.min, f.max, f.step]]))).toEqual(MUSIC_RANGES);
   });
   it('groups fields under the spec headings', () => {
     const groups = [];
@@ -90,6 +115,14 @@ describe('presets', () => {
     const expected = Object.fromEntries(Object.entries(EXPECTED).map(([k, v]) => [k, v[i]]));
     expect(PRESETS[name]).toEqual(expected);
   });
+  it('frantic matches the spec column exactly', () => {
+    expect(PRESETS.frantic).toEqual(FRANTIC);
+    expect(PRESETS.frantic.wallSpawnMax).toBe(1000);
+    expect(PRESETS.frantic.bombMax).toBe(30);
+  });
+  it('settingsFor returns the frantic preset itself', () => {
+    expect(settingsFor('frantic')).toBe(PRESETS.frantic);
+  });
   it('keeps every preset value inside its own range and step', () => {
     for (const preset of Object.values(PRESETS)) {
       FIELDS.forEach((f) => expect(clampField(f, preset[f.key])).toEqual(preset[f.key]));
@@ -97,13 +130,16 @@ describe('presets', () => {
   });
   it('freezes the presets and their lists', () => {
     expect(Object.isFrozen(PRESETS.hard)).toBe(true);
+    expect(Object.isFrozen(PRESETS.frantic)).toBe(true);
     for (const preset of Object.values(PRESETS)) {
       expect(Object.isFrozen(preset.ghostHalves)).toBe(true);
       expect(Object.isFrozen(preset.invisibleHalves)).toBe(true);
     }
   });
-  it('lists the four difficulties and defaults to medium', () => {
-    expect(DIFFICULTIES).toEqual(['easy', 'medium', 'hard', 'custom']);
+  it('lists the difficulties and defaults to medium', () => {
+    expect(DIFFICULTIES).toEqual(['easy', 'medium', 'hard', 'frantic', 'random', 'custom']);
+    expect(isDifficulty('frantic')).toBe(true);
+    expect(isDifficulty('random')).toBe(true);
     expect(DEFAULT_DIFFICULTY).toBe('medium');
     expect(isDifficulty('hard')).toBe(true);
     expect(isDifficulty('nightmare')).toBe(false);
@@ -168,22 +204,65 @@ describe('clampField for list fields', () => {
   });
 });
 
-describe('music trigger fields', () => {
-  const triggers = FIELDS.filter((f) => f.group === 'Music');
-  it('accept 0 and 1000, clamp 1001 down and -5 up', () => {
-    for (const f of triggers) {
+describe('music settings', () => {
+  it('has frozen defaults 0, 0, 8, 16 ... 72', () => {
+    expect(Object.values(DEFAULT_MUSIC)).toEqual([0, 0, 8, 16, 24, 32, 40, 48, 56, 64, 72]);
+    expect(Object.keys(DEFAULT_MUSIC)).toEqual(MUSIC_KEYS);
+    expect(Object.isFrozen(DEFAULT_MUSIC)).toBe(true);
+  });
+  it('accepts 0 and 1000, clamps 1001 down and -5 up', () => {
+    for (const f of MUSIC_FIELDS) {
       expect(clampField(f, 0)).toBe(0);
       expect(clampField(f, 1000)).toBe(1000);
       expect(clampField(f, 1001)).toBe(1000);
       expect(clampField(f, -5)).toBe(0);
     }
+    expect(sanitizeMusic({ fillTrigger: 1001 }).fillTrigger).toBe(1000);
   });
-  it('fill from medium when an old save lacks them', () => {
-    const s = sanitize({ gridSize: 30 });
-    for (const f of triggers) expect(s[f.key]).toBe(PRESETS.medium[f.key]);
+  it('fills missing and corrupt fields with the defaults, field by field', () => {
+    expect(sanitizeMusic({ snareTrigger: 5, hatTrigger: 'loud', bogus: 1 })).toEqual({ ...DEFAULT_MUSIC, snareTrigger: 5 });
+    for (const bad of [null, undefined, 'x', 7, [1, 2]]) expect(sanitizeMusic(bad)).toEqual(DEFAULT_MUSIC);
   });
-  it('keep 0 rather than falling back to the default', () => {
-    expect(sanitize({ fillTrigger: 0 }).fillTrigger).toBe(0);
+  it('keeps 0 rather than falling back to the default', () => {
+    expect(sanitizeMusic({ fillTrigger: 0 }).fillTrigger).toBe(0);
+  });
+  it('is not part of sanitize or the presets (only a Random roll carries its own)', () => {
+    expect(Object.keys(sanitize({ kickTrigger: 5 }))).toEqual(FIELDS.map((f) => f.key));
+    for (const preset of Object.values(PRESETS)) MUSIC_KEYS.forEach((k) => expect(preset).not.toHaveProperty(k));
+  });
+  describe('settingsWithMusic', () => {
+    const music = { ...DEFAULT_MUSIC, snareTrigger: 5 };
+    it.each(['easy', 'medium', 'hard', 'frantic'])('puts the saved music on %s', (d) => {
+      const merged = settingsWithMusic(d, PRESETS[d], music);
+      expect(merged).toEqual({ ...PRESETS[d], ...music });
+      expect(merged.snareTrigger).toBe(5);
+    });
+    it('puts the saved music on Custom', () => {
+      expect(settingsWithMusic('custom', sanitize({}), music).snareTrigger).toBe(5);
+    });
+    it('keeps the roll\'s own music on Random and leaves the saved music untouched', () => {
+      const roll = randomSettings(seededRng(3));
+      const frozen = JSON.stringify(music);
+      const merged = settingsWithMusic('random', roll, music);
+      expect(merged).toEqual(roll);
+      MUSIC_KEYS.forEach((k) => expect(merged[k]).toBe(roll[k]));
+      expect(JSON.stringify(music)).toBe(frozen);
+    });
+    it('restores the saved music when switching back from Random', () => {
+      settingsWithMusic('random', randomSettings(seededRng(3)), music);
+      expect(settingsWithMusic('hard', PRESETS.hard, music).snareTrigger).toBe(5);
+    });
+    it('fills any trigger a Random settings object lacks from the saved music', () => {
+      expect(settingsWithMusic('random', PRESETS.hard, music).snareTrigger).toBe(5);
+    });
+  });
+  it('withMusic merges music over settings without mutating either', () => {
+    const music = { ...DEFAULT_MUSIC, kickTrigger: 3 };
+    const merged = withMusic(PRESETS.hard, music);
+    expect(merged).toEqual({ ...PRESETS.hard, ...music });
+    expect(merged.kickTrigger).toBe(3);
+    expect(PRESETS.hard).not.toHaveProperty('kickTrigger');
+    expect(music).not.toHaveProperty('gridSize');
   });
 });
 
@@ -220,6 +299,15 @@ describe('sanitize and settingsFor', () => {
     expect(settingsFor('custom', { gridSize: 12 }).gridSize).toBe(12);
     expect(settingsFor('custom', { gridSize: 12 }).bpmScale).toBe(1);
   });
+  it('rolls a fresh randomSettings from the injected rng for random, and never touches Math.random', () => {
+    const rng = seededRng(5);
+    expect(settingsFor('random', {}, rng)).toEqual(randomSettings(seededRng(5)));
+    expect(settingsFor('random', {}, seededRng(5))).not.toBe(settingsFor('random', {}, seededRng(5)));
+    expect(settingsFor('random', undefined, seededRng(5))).not.toEqual(settingsFor('random', undefined, seededRng(6)));
+  });
+  it('falls back to medium for random without an rng rather than crashing', () => {
+    expect(settingsFor('random')).toBe(PRESETS.medium);
+  });
   it('falls back to medium for an unknown difficulty', () => {
     expect(settingsFor('nightmare')).toBe(PRESETS.medium);
   });
@@ -246,6 +334,11 @@ describe('applyEdit and describeRange', () => {
   it('describes ranges for labels', () => {
     expect(describeRange(field('gridSize'))).toBe('10–50');
     expect(describeRange(field('bpmScale'))).toBe('0.1–20, step 0.1');
+    expect(describeRange(field('wallSpawnMax'))).toBe('10–1000');
+    expect(describeRange(field('bombMax'))).toBe('1–50');
+    expect(describeRange(field('enemySize'))).toBe('1–25');
+    expect(describeRange(field('enemyMax'))).toBe('1–10');
+    expect(describeRange(MUSIC_FIELDS[0])).toBe('0–1000');
     expect(describeRange(field('ghostHalves'))).toBe('1–1000 each, comma separated');
   });
 });

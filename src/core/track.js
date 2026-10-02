@@ -2,11 +2,11 @@ export const STEPS_PER_BAR = 16;
 export const TOTAL_BARS = 32;
 export const TOTAL_STEPS = STEPS_PER_BAR * TOTAL_BARS;
 
-// The independent layers, in the order they enter by default (bass and kick always play).
-export const LAYERS = ['hat', 'melody', 'snare', 'sixteenthHat', 'arp', 'bassPulse', 'harmony', 'counter', 'fill'];
+// The independent layers, in the order they enter by default (kick and bass first, at trigger 0).
+export const LAYERS = ['kick', 'bass', 'hat', 'melody', 'snare', 'sixteenthHat', 'arp', 'bassPulse', 'harmony', 'counter', 'fill'];
 
-// The layers switched on at tier n: the first n of LAYERS (tier 0 is bass + kick only).
-export const layersForTier = (tier) => Object.fromEntries(LAYERS.map((name, i) => [name, tier >= i + 1]));
+// The layers switched on at tier n: kick and bass always, then the first n of the rest (tier 0 is bass + kick only).
+export const layersForTier = (tier) => Object.fromEntries(LAYERS.map((name, i) => [name, i < 2 || tier >= i - 1]));
 
 // MIDI roots for the bass (one octave below the melody's home register).
 const BASS_ROOT = { Am: 45, F: 41, C: 48, G: 43, E: 40 };
@@ -94,11 +94,14 @@ export function eventsAt(step, active) {
   const harmony = active.harmony && line !== null ? thirdAbove(line) : null;
   const arp = active.arp ? CHORD_TONES[chord][ARP_ORDER[inBar % 4]] : null;
 
+  // The pulse replaces the quarter-note line, but only while the bass layer itself plays.
   let bass = null;
-  if (active.bassPulse) {
-    if (onEighth) bass = BASS_ROOT[chord] + (slot % 2 === 1 ? 12 : 0);
-  } else if (onQuarter) {
-    bass = BASS_ROOT[chord] + BASS_OFFSETS[inBar / 4];
+  if (active.bass) {
+    if (active.bassPulse) {
+      if (onEighth) bass = BASS_ROOT[chord] + (slot % 2 === 1 ? 12 : 0);
+    } else if (onQuarter) {
+      bass = BASS_ROOT[chord] + BASS_OFFSETS[inBar / 4];
+    }
   }
 
   const backbeat = inBar === 4 || inBar === 12;
@@ -106,5 +109,5 @@ export function eventsAt(step, active) {
   const snare = Boolean((active.snare && backbeat) || (active.fill && fill));
   const hat = active.sixteenthHat ? true : Boolean(active.hat) && onEighth;
 
-  return { melody, harmony, counter, arp, bass, kick: onQuarter, snare, hat };
+  return { melody, harmony, counter, arp, bass, kick: Boolean(active.kick) && onQuarter, snare, hat };
 }

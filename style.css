@@ -47,5 +47,6 @@ dialog h2 { margin: 0 0 0.5rem; }
 .field { display: grid; gap: 0.15rem; margin: 0.4rem 0; font-size: 0.9rem; }
 .field input { width: 100%; box-sizing: border-box; min-height: 44px; font: inherit; padding: 0 0.5rem; }
 .field input.locked, .field input[readonly] { background: #eef1f4; color: #52606d; }
+.music-reset { width: 100%; min-height: 44px; margin-top: 0.4rem; font: inherit; }
 .dialog-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; position: sticky; bottom: 0; background: #fff; padding-top: 0.5rem; }
 .dialog-actions button { min-height: 48px; }

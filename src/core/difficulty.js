@@ -1,4 +1,4 @@
-export const DIFFICULTIES = ['easy', 'medium', 'hard', 'custom'];
+export const DIFFICULTIES = ['easy', 'medium', 'hard', 'frantic', 'random', 'custom'];
 export const DEFAULT_DIFFICULTY = 'medium';
 export const isDifficulty = (value) => DIFFICULTIES.includes(value);
 
@@ -20,20 +20,26 @@ export const FIELDS = [
   f('bombTrigger', 'Bomb Trigger', 'Bombs', 1, 1000),
   f('bombRate', 'Bomb Spawn Rate', 'Bombs', 1, 10),
   f('bombCount', 'Bomb Spawn Count', 'Bombs', 1, 5),
-  f('bombMax', 'Bomb Spawn Max', 'Bombs', 1, 25),
+  f('bombMax', 'Bomb Spawn Max', 'Bombs', 1, 50),
   f('wallSpawnTrigger', 'Wall Spawn Trigger', 'Spawning walls', 1, 1000),
   f('wallSpawnSize', 'Wall Spawn Size', 'Spawning walls', 1, 10),
   f('wallSpawnRate', 'Wall Spawn Rate', 'Spawning walls', 1, 10),
   f('wallSpawnCount', 'Wall Spawn Count', 'Spawning walls', 1, 5),
-  f('wallSpawnMax', 'Wall Spawn Max (cells)', 'Spawning walls', 10, 250),
+  f('wallSpawnMax', 'Wall Spawn Max (cells)', 'Spawning walls', 10, 1000),
   f('enemyTrigger', 'Enemy Spawn Trigger', 'Enemies', 1, 1000),
-  f('enemySize', 'Enemy Spawn Size', 'Enemies', 1, 10),
+  f('enemySize', 'Enemy Spawn Size', 'Enemies', 1, 25),
   f('enemyRate', 'Enemy Spawn Rate', 'Enemies', 1, 10),
-  f('enemyMax', 'Enemy Spawn Max', 'Enemies', 1, 5),
+  f('enemyMax', 'Enemy Spawn Max', 'Enemies', 1, 10),
   f('movingWallTrigger', 'Moving Wall Trigger', 'Effects', 1, 1000),
   f('invisibleTrigger', 'Invisible Hazard Trigger', 'Effects', 1, 1000),
   f('invisibleTiming', 'Invisible Hazard Timing', 'Effects', 1, 40),
   list('invisibleHalves', 'Invisible Hazard Half Trigger', 'Effects'),
+];
+
+// The eleven music triggers are a global setting set: not per difficulty, always editable, stored on their own.
+export const MUSIC_FIELDS = [
+  f('kickTrigger', 'Kick Trigger', 'Music', 0, 1000),
+  f('bassTrigger', 'Bass Trigger', 'Music', 0, 1000),
   f('hatTrigger', 'Hi-Hat Trigger', 'Music', 0, 1000),
   f('melodyTrigger', 'Melody Trigger', 'Music', 0, 1000),
   f('snareTrigger', 'Snare Trigger', 'Music', 0, 1000),
@@ -47,10 +53,10 @@ export const FIELDS = [
 
 const GHOST_HALVES = Object.freeze([60, 120, 180, 240]);
 const INVISIBLE_HALVES = Object.freeze([200, 400, 600, 800]);
-const MUSIC = {
-  hatTrigger: 8, melodyTrigger: 16, snareTrigger: 24, fastHatTrigger: 32, arpTrigger: 40,
+export const DEFAULT_MUSIC = Object.freeze({
+  kickTrigger: 0, bassTrigger: 0, hatTrigger: 8, melodyTrigger: 16, snareTrigger: 24, fastHatTrigger: 32, arpTrigger: 40,
   bassPulseTrigger: 48, harmonyTrigger: 56, counterTrigger: 64, fillTrigger: 72,
-};
+});
 
 export const PRESETS = Object.freeze({
   easy: Object.freeze({
@@ -61,7 +67,6 @@ export const PRESETS = Object.freeze({
     wallSpawnTrigger: 48, wallSpawnSize: 1, wallSpawnRate: 2, wallSpawnCount: 1, wallSpawnMax: 40,
     enemyTrigger: 64, enemySize: 2, enemyRate: 5, enemyMax: 1,
     movingWallTrigger: 80, invisibleTrigger: 100, invisibleTiming: 20, invisibleHalves: INVISIBLE_HALVES,
-    ...MUSIC,
   }),
   medium: Object.freeze({
     gridSize: 20, initialBpm: 120, finalBpm: 200, bpmScale: 1, growth: 1, maxLength: 200,
@@ -71,7 +76,6 @@ export const PRESETS = Object.freeze({
     wallSpawnTrigger: 48, wallSpawnSize: 2, wallSpawnRate: 1, wallSpawnCount: 1, wallSpawnMax: 80,
     enemyTrigger: 64, enemySize: 3, enemyRate: 5, enemyMax: 1,
     movingWallTrigger: 80, invisibleTrigger: 100, invisibleTiming: 16, invisibleHalves: INVISIBLE_HALVES,
-    ...MUSIC,
   }),
   hard: Object.freeze({
     gridSize: 40, initialBpm: 144, finalBpm: 240, bpmScale: 1.2, growth: 2, maxLength: 800,
@@ -81,7 +85,15 @@ export const PRESETS = Object.freeze({
     wallSpawnTrigger: 48, wallSpawnSize: 4, wallSpawnRate: 1, wallSpawnCount: 2, wallSpawnMax: 200,
     enemyTrigger: 64, enemySize: 6, enemyRate: 5, enemyMax: 4,
     movingWallTrigger: 80, invisibleTrigger: 100, invisibleTiming: 8, invisibleHalves: INVISIBLE_HALVES,
-    ...MUSIC,
+  }),
+  frantic: Object.freeze({
+    gridSize: 50, initialBpm: 160, finalBpm: 280, bpmScale: 1.4, growth: 2, maxLength: 1000,
+    ghostTime: 6, ghostHalves: GHOST_HALVES,
+    wallTrigger: 16, wallSize: 10, wallCount: 20,
+    bombTrigger: 32, bombRate: 1, bombCount: 5, bombMax: 30,
+    wallSpawnTrigger: 48, wallSpawnSize: 6, wallSpawnRate: 1, wallSpawnCount: 4, wallSpawnMax: 1000,
+    enemyTrigger: 64, enemySize: 10, enemyRate: 3, enemyMax: 8,
+    movingWallTrigger: 80, invisibleTrigger: 100, invisibleTiming: 8, invisibleHalves: INVISIBLE_HALVES,
   }),
 });
 
@@ -122,8 +134,61 @@ export function sanitize(input, fallback = PRESETS.medium) {
   return Object.fromEntries(FIELDS.map((fld) => [fld.key, clampField(fld, source[fld.key]) ?? copy(fallback[fld.key])]));
 }
 
-export const settingsFor = (difficulty, custom) =>
-  difficulty === 'custom' ? sanitize(custom) : Object.hasOwn(PRESETS, difficulty) ? PRESETS[difficulty] : PRESETS.medium;
+// A complete, valid music object; every bad or missing trigger takes its default.
+export function sanitizeMusic(input) {
+  const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  return Object.fromEntries(MUSIC_FIELDS.map((fld) => [fld.key, clampField(fld, source[fld.key]) ?? DEFAULT_MUSIC[fld.key]]));
+}
+
+// The full settings the engine reads: the difficulty's settings plus the global music triggers.
+export const withMusic = (settings, music) => ({ ...settings, ...music });
+
+// A uniform pick from min..max on `step` (float steps rounded the same way as clampField).
+const pick = (rng, min, max, step = 1) => {
+  const steps = Math.floor((max - min) / step + 1e-9);
+  const index = Math.min(steps, Math.floor(rng() * (steps + 1)));
+  return Number((min + index * step).toFixed(decimals(step)));
+};
+
+const HALF_CAPS = [200, 400, 600, 800];
+const BPM_RANGE = [60, 260];
+const MUSIC_CAP = 99;
+const CELL_CAPS = { maxLength: [3, 0.5], wallSpawnMax: [10, 0.2], bombMax: [1, 0.1], enemyMax: [1, 0.1] };
+// Highest value a Random roll may use: triggers stay below 100, counts scale with the board's cells.
+const randomCap = (field, cells) => {
+  if (field.key.endsWith('Trigger')) return 99;
+  const cap = CELL_CAPS[field.key];
+  return cap ? Math.min(field.max, Math.max(cap[0], Math.floor(cap[1] * cells))) : field.max;
+};
+
+// A complete, valid settings object with every field rolled from the injected `rng` (() => [0, 1)).
+// Grid size is rolled first (it leads FIELDS) because the caps on snake length and hazard counts depend on it.
+export function randomSettings(rng) {
+  const settings = {};
+  FIELDS.forEach((field) => {
+    if (field.type === 'list') {
+      settings[field.key] = HALF_CAPS.map((cap) => pick(rng, 1, cap));
+      return;
+    }
+    const cells = (settings.gridSize ?? 0) ** 2;
+    const [min, max] = field.key.endsWith('Bpm') ? BPM_RANGE : [field.min, randomCap(field, cells)];
+    settings[field.key] = pick(rng, min, max, field.step);
+  });
+  // The roll carries its own music triggers; they are for that game only and never replace the player's.
+  MUSIC_FIELDS.forEach((field) => { settings[field.key] = pick(rng, 0, MUSIC_CAP); });
+  return settings;
+}
+
+// What the engine runs: the player's global music with every difficulty, but a Random roll keeps its own.
+export const settingsWithMusic = (difficulty, settings, music) => (difficulty === 'random' ? { ...music, ...settings } : withMusic(settings, music));
+
+// Settings for a difficulty. Stays pure: Random needs the caller's injected `rng` (main.js passes Math.random);
+// without one it falls back to Medium rather than rolling from a hidden source.
+export function settingsFor(difficulty, custom, rng) {
+  if (difficulty === 'custom') return sanitize(custom);
+  if (difficulty === 'random') return typeof rng === 'function' ? randomSettings(rng) : PRESETS.medium;
+  return Object.hasOwn(PRESETS, difficulty) ? PRESETS[difficulty] : PRESETS.medium;
+}
 
 export function applyEdit(draft, field, raw) {
   const value = clampField(field, raw);
