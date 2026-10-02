@@ -1,4 +1,4 @@
-import { eventsAt, TIERS } from './core/track.js';
+import { eventsAt } from './core/track.js';
 
 const MASTER_VOLUME = 0.2;
 const LEVEL = {
@@ -109,14 +109,14 @@ export function createSynth(
       }
     },
     now: () => (ctx ? ctx.currentTime : performance.now() / 1000),
-    playStep(step, time, dt, tier) {
+    playStep(step, time, dt, active) {
       if (!ctx) return;
-      const e = eventsAt(step, tier);
+      const e = eventsAt(step, active);
       if (e.kick) kick(time);
       if (e.snare) snare(time);
       if (e.hat) hat(time);
       if (e.bass !== null) {
-        const bassLength = tier >= TIERS.bassPulse ? dt * 1.8 : dt * 3.6;
+        const bassLength = active.bassPulse ? dt * 1.8 : dt * 3.6;
         tone('triangle', e.bass, time, bassLength, LEVEL.bass);
       }
       if (e.arp !== null) tone('square', e.arp, time, dt * 0.9, LEVEL.arp);

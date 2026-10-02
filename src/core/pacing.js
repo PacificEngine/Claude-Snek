@@ -1,16 +1,31 @@
-const BASE_BPM = 120;
-const BPM_PER_RISE = 4;
-const APPLES_PER_RISE = 4;
-const MAX_BPM = 200;
-const APPLES_PER_TIER = 8;
-const MAX_TIER = 10;
+import { PRESETS, DEFAULT_MUSIC, withMusic } from './difficulty.js';
+
 const STEPS_PER_BEAT = 4; // one step per sixteenth note
 
-// `apples` is apples eaten (the score); `speed` is the Game Speed Modifier setting.
-export const bpm = (apples, speed = 1) =>
-  Math.min(MAX_BPM, BASE_BPM + Math.floor(Math.max(0, apples) / APPLES_PER_RISE) * BPM_PER_RISE) * speed;
+// Tempo after `apples` apples: starts at initialBpm, moves bpmScale per apple toward finalBpm and stops there.
+export const bpm = (apples, { initialBpm, finalBpm, bpmScale } = PRESETS.medium) => {
+  const moved = bpmScale * Math.max(0, apples);
+  const value = finalBpm >= initialBpm ? Math.min(finalBpm, initialBpm + moved) : Math.max(finalBpm, initialBpm - moved);
+  return Math.round(value * 10000) / 10000;
+};
 
-export const musicTier = (apples) =>
-  Math.min(MAX_TIER, Math.floor(Math.max(0, apples) / APPLES_PER_TIER));
+// Which setting holds the apple count at which each music layer enters.
+const LAYER_TRIGGERS = {
+  kick: 'kickTrigger',
+  bass: 'bassTrigger',
+  hat: 'hatTrigger',
+  melody: 'melodyTrigger',
+  snare: 'snareTrigger',
+  sixteenthHat: 'fastHatTrigger',
+  arp: 'arpTrigger',
+  bassPulse: 'bassPulseTrigger',
+  harmony: 'harmonyTrigger',
+  counter: 'counterTrigger',
+  fill: 'fillTrigger',
+};
+
+// Each music layer is active once the apples eaten reach its own trigger (0 means from the start).
+export const activeLayers = (apples, settings = withMusic(PRESETS.medium, DEFAULT_MUSIC)) =>
+  Object.fromEntries(Object.entries(LAYER_TRIGGERS).map(([layer, key]) => [layer, apples >= settings[key]]));
 
 export const stepSeconds = (beatsPerMinute) => 60 / beatsPerMinute / STEPS_PER_BEAT;

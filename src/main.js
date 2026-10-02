@@ -1,8 +1,8 @@
 import { createState, queueDirection, tick, togglePause } from './core/game.js';
-import { bpm, musicTier } from './core/pacing.js';
-import { createTierGate } from './core/tier-gate.js';
-import { loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom } from './storage.js';
-import { settingsFor } from './core/difficulty.js';
+import { bpm, activeLayers } from './core/pacing.js';
+import { createLayerGate } from './core/layer-gate.js';
+import { loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, SCORED } from './storage.js';
+import { settingsFor, settingsWithMusic } from './core/difficulty.js';
 import { createMenu, difficultyLabel } from './menu.js';
 import { actionForKey, actionForButton } from './input.js';
 import { createSynth } from './synth.js';
@@ -21,20 +21,23 @@ const difficultyBtn = document.getElementById('difficulty-open');
 const synth = createSynth();
 let difficulty = loadDifficulty();
 let custom = loadCustom();
-let settings = settingsFor(difficulty, custom);
+let music = loadMusic();
+// The settings for the next run: the difficulty's (Random re-rolls here) plus the global music triggers (a Random roll brings its own).
+const nextSettings = () => settingsWithMusic(difficulty, settingsFor(difficulty, custom, Math.random), music);
+let settings = nextSettings();
 let best = loadBest(difficulty);
 let state = createState(Math.random, settings);
 let started = false;
 // Bumped whenever the beat stops, so steps already scheduled ahead are dropped.
 let epoch = 0;
 // New layers enter on the next bar line, not the moment an apple is eaten.
-const tierGate = createTierGate(() => musicTier(state.score));
+const layerGate = createLayerGate(() => activeLayers(state.score, state.settings));
 
 const conductor = createConductor({
   now: () => synth.now(),
-  getBpm: () => bpm(state.score, state.settings.speed),
+  getBpm: () => bpm(state.score, state.settings),
   onStep(step, time, dt) {
-    synth.playStep(step, time, dt, tierGate.tierFor(step));
+    synth.playStep(step, time, dt, layerGate.layersFor(step));
     const scheduledIn = epoch;
     setTimeout(() => {
       if (scheduledIn === epoch) advance();
@@ -47,7 +50,7 @@ const runInProgress = () => started && state.status !== 'gameOver';
 function updateHud() {
   scoreEl.textContent = String(state.score);
   bestEl.textContent = String(best);
-  bestWrap.hidden = difficulty === 'custom';
+  bestWrap.hidden = !SCORED.includes(difficulty);
   difficultyBtn.textContent = `Difficulty: ${difficultyLabel(difficulty)}`;
   difficultyBtn.setAttribute('aria-label', `Difficulty: ${difficultyLabel(difficulty)}, choose difficulty`);
   difficultyBtn.disabled = runInProgress();
@@ -73,11 +76,15 @@ function stopBeat() {
 // One snake step, applied on the beat.
 function advance() {
   state = tick(state, Math.random);
-  if (difficulty !== 'custom' && state.score > best) {
+  if (SCORED.includes(difficulty) && state.score > best) {
     best = state.score;
     saveBest(difficulty, best);
   }
-  if (state.status === 'gameOver') stopBeat();
+  if (state.status === 'gameOver') {
+    stopBeat();
+    // Random re-rolls for the next run now, so the menu shows what the next run will use.
+    settings = nextSettings();
+  }
   draw();
 }
 
@@ -87,13 +94,16 @@ function restart() {
   draw();
 }
 
-function applyDifficulty(nextDifficulty, nextCustom) {
+// `roll` is the Random roll the dialog previewed, so what was shown is what runs.
+function applyDifficulty(nextDifficulty, nextCustom, roll, nextMusic) {
   stopBeat();
   difficulty = nextDifficulty;
   custom = nextCustom;
-  settings = settingsFor(difficulty, custom);
+  music = nextMusic;
+  settings = difficulty === 'random' && roll ? settingsWithMusic('random', roll, music) : nextSettings();
   saveDifficulty(difficulty);
   saveCustom(custom);
+  saveMusic(music);
   best = loadBest(difficulty);
   state = createState(Math.random, settings);
   started = false;
@@ -108,7 +118,8 @@ createMenu({
   openBtn: difficultyBtn,
   applyBtn: document.getElementById('difficulty-apply'),
   cancelBtn: document.getElementById('difficulty-cancel'),
-  getCurrent: () => ({ difficulty, custom }),
+  getCurrent: () => ({ difficulty, custom, music, settings }),
+  rng: Math.random,
   canOpen: () => !runInProgress(),
   onApply: applyDifficulty,
 });

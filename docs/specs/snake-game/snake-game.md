@@ -16,22 +16,11 @@ A single-player, browser-based Snake-style game. It's a personal learning projec
 - Food spawns on a random empty cell, never on the snake.
 - The game ends when the snake hits the arena edge, itself, or a solid hazard (walls, bomb, enemy snake; see `./hazards.md`).
 - A restart is available after game over.
-- Game speed and music tempo increase once for every 4 apples eaten (not on every apple): the base BPM rises 4 per 4 apples, from 120 to 200 at the 80th apple. The Game Speed Modifier of the active difficulty multiplies that BPM (Medium: 1.0).
+- Game speed and music tempo move with every apple eaten: the BPM goes from the difficulty's Initial BPM towards its Final BPM by BPM Scale per apple (Medium: 120 to 200, 1 per apple, reached at the 80th apple). See `./difficulty.md`.
 - The snake advances exactly one cell per sixteenth note of the music (rhythm-game feel): the music and the game share one beat clock, so every step lands on the beat grid.
 - Synthesized MIDI/chiptune-style background music plays during play: a 32-bar track (intro 4, verse 8, chorus 8, bridge 4, final chorus 8) in A minor with melody, a bass line, a synth kick on every quarter note and a synth hi-hat on every eighth note. Tempo rises with apples eaten (above), which also speeds up the game; the track keeps its place when the tempo changes.
-- The music grows more complex only as apples are eaten, in 10 tiers (one every 8 apples) that add layers on top of the 32-bar structure; the 80th apple reaches tier 10, a very complex loop with every layer playing:
-  - tier 0 (0-7 apples): bass and kick only
-  - tier 1 (8-15): hi-hat on eighth notes
-  - tier 2 (16-23): melody enters (verse, chorus and the other sections apply)
-  - tier 3 (24-31): snare on beats 2 and 4
-  - tier 4 (32-39): hi-hat becomes sixteenth notes
-  - tier 5 (40-47): fast chord arpeggio under the melody
-  - tier 6 (48-55): bass becomes a driving eighth-note pulse
-  - tier 7 (56-63): harmony a third above the melody
-  - tier 8 (64-71): counter-melody, an octave up and offset
-  - tier 9 (72-79): drum fill at the end of every 4th bar
-  - tier 10 (80+): everything at once
-- A tier change takes effect at the next bar line so a new layer enters on a downbeat. Restarting after game over resets to tier 0 and 0 apples.
+- The music grows more complex only as apples are eaten: each instrument layer enters when the apple count reaches its own trigger from the difficulty's Music settings (see `./difficulty.md`; defaults every 8 apples in this order: eighth-note hi-hat 8, melody 16, snare on beats 2 and 4 24, sixteenth-note hi-hat 32, chord arpeggio 40, eighth-note bass pulse 48, harmony a third above the melody 56, counter-melody 64, drum fill at the end of every 4th bar 72). Bass and kick always play. Triggers are independent and can be in any order.
+- A layer change takes effect at the next bar line so a new layer enters on a downbeat. Restarting after game over resets to 0 apples.
 - Pausing stops the music and the snake; resuming continues on the next step. Game over stops the music; restart begins the track again from bar 1.
 - A mute/unmute toggle for the music.
 - On-screen buttons make the game fully playable on touch devices as well as with the keyboard: a four-way D-pad (up, down, left, right), a Pause button, a Restart button, and the existing Mute button. Each button triggers exactly the same game action as its key through one shared action path.
@@ -103,7 +92,7 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
   - storage (per-difficulty best scores, chosen difficulty, Custom settings)
   - difficulty menu (a native dialog; edits Custom, shows presets locked)
 - **Beat clock (pure + adapter):** a conductor counts sixteenth-note steps and gives each step's time. Both the game step and the music events for step *n* are scheduled at that step's time. With no Web Audio it runs from a timer instead.
-- **Track (pure data):** the 32-bar arrangement indexed by step number (0-511, then loops); `eventsAt(step, tier)` returns what plays at that complexity tier (melody, harmony, counter-melody, arpeggio, bass, kick, snare, hi-hat, fill).
+- **Track (pure data):** the 32-bar arrangement indexed by step number (0-511, then loops); `eventsAt(step, active)` returns what plays given which instrument layers are active (melody, harmony, counter-melody, arpeggio, bass, kick, snare, hi-hat, fill).
 - **`main.js`:** ties the pieces together around the beat clock.
 
 ## Testing Strategy
@@ -115,9 +104,9 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
   - food placement
   - scoring
   - the tempo curve (apples eaten to BPM in steps of 4 apples; BPM to step interval, steps/sec = BPM ÷ 15)
-  - the tier curve (apples eaten to tier 0-10, one tier per 8 apples, capped at 10)
-  - track lookup: which events fire on step *n* at each tier, layers appearing in the tier order above, kick on quarters, wraparound after 512 steps
-  - tier changes deferred to the next bar line
+  - the active layers (apples eaten against each instrument's trigger setting, in any order, 0 meaning from the start)
+  - track lookup: which events fire on step *n* for a given set of active layers, each layer independent of the others, kick on quarters, wraparound after 512 steps
+  - layer changes deferred to the next bar line
   - high-score validation, per-difficulty keys, no Custom score
   - difficulty presets, validation and growth: see `./difficulty.md`
   - button-to-action mapping (each button yields the same action as its key)
@@ -133,7 +122,7 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
 - Food is a single cell.
 - State is `{snake, direction, food, score, status, hazards, settings, growth}`, with status `playing`, `paused` or `gameOver`; `hazards` is described in `./hazards.md`, `settings` and `growth` in `./difficulty.md`.
 - Stored in localStorage: the chosen difficulty, the Custom settings, and one best score per preset difficulty (none for Custom).
-- Derived: apples eaten = the score (no longer the snake's length, because growth can differ from 1 per apple); BPM = f(floor(apples ÷ 4)); tier = min(10, floor(apples ÷ 8)); steps/sec and the step interval derive from BPM.
+- Derived: apples eaten = the score (no longer the snake's length, because growth can differ from 1 per apple); BPM = f(floor(apples ÷ 4)); each music layer is active when apples ≥ its trigger; steps/sec and the step interval derive from BPM.
 - Beat clock: a step counter (0 at music start or restart) plus the audio-clock time of the next step.
 
 ## Decisions (resolved from earlier open questions)
@@ -145,13 +134,13 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
 - Debug overlay: deferred.
 
 ## Open Questions
-- The melody, bass, tier layers and section details are composed as data and tuned by ear after first listen; expect revisions.
+- The melody, bass, instrument layers and section details are composed as data and tuned by ear after first listen; expect revisions.
 
 ## Feature Breakdown
 - Movement and controls: covered in this spec
 - Food, growth and score: covered in this spec
 - Game over and restart: covered in this spec
-- Synthesized 32-bar music with rising tempo and apple-driven complexity tiers: covered in this spec
+- Synthesized 32-bar music with rising tempo and apple-driven instrument layers: covered in this spec
 - Beat-synced movement (one step per sixteenth note): covered in this spec
 - Mute toggle: covered in this spec
 - Pause, high score, visual polish: nice-to-haves, covered in this spec

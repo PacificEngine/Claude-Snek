@@ -29,7 +29,7 @@ Obstacles that appear as the player eats apples and make the board harder: first
 
 **Telegraph (time to react):**
 - Every new or moved obstacle (wall, bomb, enemy respawn) first appears as a ghost: a flashing outline that cannot hurt the snake. After its ghost time it turns solid.
-- The ghost time comes from the Ghost Time setting (Medium: 24 steps) and depends on the apple count at the moment the obstacle is placed: the full setting up to and including apple 60, half of it (rounded to a whole step) from apple 61 to apple 120, and a quarter of it (rounded) from apple 121 on. For Medium that is 24, 12 and 6 steps (about 3 s, 1.5 s and 0.45 s at 120–200 BPM). It applies to every obstacle (walls, bombs, enemies). Each obstacle keeps the ghost time it was created with, so crossing apple 60 or 120 does not shorten obstacles already on the board. A ghost time of 0 means the obstacle is solid the moment it is placed.
+- The ghost time comes from the Ghost Time setting (Medium: 24 steps) and depends on the apple count at the moment the obstacle is placed: the full setting up to and including the first half-trigger entry (60 by default), then halved (rounded up to a whole step) once for each Ghost Time Half Trigger entry below the apple count (default 60, 120, 180, 240; a value listed twice halves twice). For Medium that is 24, 12, 6, 3 and 2 steps. The same rule halves the Invisible Hazard Timing with its own list (default 200, 400, 600, 800), rounded up, minimum 1. It applies to every obstacle (walls, bombs, enemies). Each obstacle keeps the ghost time it was created with, so crossing apple 60 or 120 does not shorten obstacles already on the board. A ghost time of 0 means the obstacle is solid the moment it is placed.
 - In the last 4 steps of its ghost time it stays steadily visible (no flashing) so the player always sees it just before it becomes dangerous. A ghost time of 6 or less therefore never flashes off at all; it is steadily visible for its whole life.
 - A ghost does not turn solid while any part of the snake is on one of its cells; it stays a ghost until the cell is clear.
 - The ghost flashes by toggling visibility every 4 steps, which is never more than about 1.7 flashes per second (under the 3 per second accessibility limit). With `prefers-reduced-motion`, it is a steady outline instead of flashing.
@@ -89,7 +89,7 @@ None beyond the parent spec. Placement failures are silent (skipped), not logged
 No new attack surface; hazards are internal game state.
 
 ## Performance & Scalability
-- The route check is a breadth-first search over at most 400 cells; at most 50 attempts per placement and a handful of placements per apple, so cost per apple is negligible.
+- The route check is a breadth-first search over at most 2,500 cells (a 50×50 grid); at most 50 attempts per placement and a handful of placements per apple, so cost per apple is negligible.
 - Enemy moves run one route check per candidate move, every 2nd step.
 
 ## UX/UI
@@ -114,7 +114,7 @@ No new attack surface; hazards are internal game state.
   - spawning walls: trigger, rate, count, size, and the spawned-cell maximum (first walls not counted)
   - enemies: first at the trigger, one more every rate apples up to the max, dead ones replaced on the next apple
   - moving walls re-lay keeps count and lengths from the moving trigger on
-  - ghost time by apple count: setting G up to apple 60, round(G ÷ 2) for 61-120, round(G ÷ 4) from 121; 0 means solid immediately; each obstacle keeps its own; ghost to solid after its own ghost time; stays ghost while the snake is on it
+  - ghost time by apple count: setting G halved (rounded up) once per Ghost Time Half Trigger entry below the apple count (defaults 60, 120, 180, 240; duplicates halve twice); 0 means solid immediately; each obstacle keeps its own; ghost to solid after its own ghost time; stays ghost while the snake is on it
   - collisions: solid wall/bomb/live enemy/dead enemy kill, ghosts do not
   - enemy: moves every 2nd step, safe-move filter, never breaks the route, dies when trapped, stays as obstacle, respawns on next apple as a ghost
   - fade: opacity falls over the configured timing, only for walls and bombs placed on or after the invisible trigger; enemies never fade

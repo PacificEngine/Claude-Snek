@@ -67,7 +67,10 @@ export function tick(state, rng) {
   let growth = state.growth ?? { carry: 0, pending: 0 };
   if (eating) {
     const gained = growthAfterApple(growth, settings.growth);
-    growth = { carry: gained.carry, pending: growth.pending + gained.cells };
+    const room = (settings.maxLength ?? Infinity) - state.snake.length;
+    growth = room > 0
+      ? { carry: gained.carry, pending: Math.min(growth.pending + gained.cells, room) }
+      : { carry: 0, pending: 0 }; // at the max size growth stops completely
   }
   const grows = growth.pending > 0;
   const bodyAfterMove = grows ? state.snake : state.snake.slice(0, -1);

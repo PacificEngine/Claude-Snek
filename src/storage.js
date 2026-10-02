@@ -1,10 +1,11 @@
-import { DEFAULT_DIFFICULTY, PRESETS, isDifficulty, sanitize } from './core/difficulty.js';
+import { DEFAULT_DIFFICULTY, isDifficulty, sanitize, sanitizeMusic } from './core/difficulty.js';
 
-export const SCORED = ['easy', 'medium', 'hard'];
+export const SCORED = ['easy', 'medium', 'hard', 'frantic'];
 const BEST_PREFIX = 'snake.highScore.';
 const LEGACY_BEST = 'snake.highScore';
 const DIFFICULTY_KEY = 'snake.difficulty';
 const CUSTOM_KEY = 'snake.custom';
+const MUSIC_KEY = 'snake.music';
 
 // Resolve storage inside the try: reading localStorage itself can throw when it is blocked.
 function guarded(action, fallback, message) {
@@ -56,17 +57,33 @@ export function saveDifficulty(difficulty, storage) {
 export function loadCustom(storage) {
   return guarded(() => {
     const raw = store(storage)?.getItem(CUSTOM_KEY);
-    if (!raw) return { ...PRESETS.medium };
+    if (!raw) return sanitize({});
     let parsed;
     try {
       parsed = JSON.parse(raw);
     } catch {
-      return { ...PRESETS.medium };
+      return sanitize({});
     }
     return sanitize(parsed);
-  }, { ...PRESETS.medium }, 'Could not read custom settings');
+  }, sanitize({}), 'Could not read custom settings');
 }
 
 export function saveCustom(custom, storage) {
   guarded(() => store(storage)?.setItem(CUSTOM_KEY, JSON.stringify(sanitize(custom))), undefined, 'Could not save custom settings');
+}
+
+export function loadMusic(storage) {
+  return guarded(() => {
+    const raw = store(storage)?.getItem(MUSIC_KEY);
+    if (!raw) return sanitizeMusic({});
+    try {
+      return sanitizeMusic(JSON.parse(raw));
+    } catch {
+      return sanitizeMusic({});
+    }
+  }, sanitizeMusic({}), 'Could not read music settings');
+}
+
+export function saveMusic(music, storage) {
+  guarded(() => store(storage)?.setItem(MUSIC_KEY, JSON.stringify(sanitizeMusic(music))), undefined, 'Could not save music settings');
 }

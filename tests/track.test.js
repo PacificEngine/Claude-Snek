@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { eventsAt, TOTAL_STEPS, STEPS_PER_BAR, TIERS } from '../src/core/track.js';
+import { eventsAt as eventsFor, layersForTier, LAYERS, TOTAL_STEPS, STEPS_PER_BAR } from '../src/core/track.js';
+
+// The tier-based assertions below call eventsAt(step, tier); a tier switches on the layers up to it.
+const eventsAt = (step, tier) => eventsFor(step, layersForTier(tier));
+const only = (...names) => Object.fromEntries(LAYERS.map((n) => [n, names.includes(n)]));
 
 const stepsAt = (tier) => Array.from({ length: TOTAL_STEPS }, (_, i) => eventsAt(i, tier));
 const melodyFrom = (tier, start, count) =>
@@ -164,10 +168,58 @@ describe('layers only accumulate', () => {
       lower.forEach((e, i) => expect(layers(higher[i])).toBeGreaterThanOrEqual(layers(e)));
     }
   });
-  it('exports the tier each layer enters at', () => {
-    expect(TIERS).toEqual({
-      hat: 1, melody: 2, snare: 3, sixteenthHat: 4, arp: 5,
-      bassPulse: 6, harmony: 7, counter: 8, fill: 9,
-    });
+  it('lists the layers in the order they enter by default', () => {
+    expect(LAYERS).toEqual(['kick', 'bass', 'hat', 'melody', 'snare', 'sixteenthHat', 'arp', 'bassPulse', 'harmony', 'counter', 'fill']);
+  });
+  it('switches on the first n layers after kick and bass for tier n, kick and bass always on', () => {
+    expect(layersForTier(0)).toEqual(only('kick', 'bass'));
+    expect(layersForTier(2)).toEqual(only('kick', 'bass', 'hat', 'melody'));
+    expect(layersForTier(10)).toEqual(only(...LAYERS));
+  });
+});
+
+describe('independent layers', () => {
+  const steps = (active) => Array.from({ length: TOTAL_STEPS }, (_, i) => eventsFor(i, active));
+  it('plays the harmony a third above the melody line while the melody layer is off', () => {
+    const e = eventsFor(64, only('harmony'));
+    expect(e.melody).toBeNull();
+    expect(e.harmony).toBe(72);
+  });
+  it('plays the counter-melody without the melody layer', () => {
+    expect(eventsFor(64, only('counter')).counter).toBe(81);
+    expect(eventsFor(64, only('counter')).melody).toBeNull();
+  });
+  it('rolls the drum fill without the snare layer, and no backbeat', () => {
+    [60, 61, 62, 63].forEach((i) => expect(eventsFor(i, only('fill')).snare).toBe(true));
+    expect(eventsFor(4, only('fill')).snare).toBe(false);
+    expect(steps(only('fill')).filter((e) => e.snare)).toHaveLength(8 * 4);
+  });
+  it('keeps the backbeat when only the snare layer is on', () => {
+    expect(eventsFor(4, only('snare')).snare).toBe(true);
+    expect(eventsFor(61, only('snare')).snare).toBe(false);
+  });
+  it('plays the sixteenth hi-hat without the eighth hi-hat layer', () => {
+    steps(only('sixteenthHat')).forEach((e) => expect(e.hat).toBe(true));
+  });
+  it('plays the eighth hi-hat only when the fast one is off', () => {
+    steps(only('hat')).forEach((e, i) => expect(e.hat).toBe(i % 2 === 0));
+  });
+  it('plays no hi-hat with neither hi-hat layer', () => {
+    expect(steps(only('melody')).some((e) => e.hat)).toBe(false);
+  });
+  it('pulses the bass on eighths with the bassPulse layer alone, on quarters otherwise', () => {
+    expect(eventsFor(2, only('bass', 'bassPulse')).bass).toBe(57);
+    expect(eventsFor(2, only('bass')).bass).toBeNull();
+    expect(eventsFor(4, only('bass')).bass).toBe(45);
+  });
+  it('plays the kick only when the kick layer is on', () => {
+    expect(steps(only('bass')).some((e) => e.kick)).toBe(false);
+    steps(only('kick')).forEach((e, i) => expect(e.kick).toBe(i % 4 === 0));
+  });
+  it('plays no bass until the bass layer is on', () => {
+    expect(steps(only('kick')).some((e) => e.bass !== null)).toBe(false);
+  });
+  it('does not sound the bass pulse without the bass layer', () => {
+    expect(steps(only('bassPulse')).some((e) => e.bass !== null)).toBe(false);
   });
 });
