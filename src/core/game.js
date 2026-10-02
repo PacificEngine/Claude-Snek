@@ -1,6 +1,7 @@
 import { START_LENGTH } from './config.js';
 import { VECTORS, OPPOSITE, cellKey, sameCell, inBounds, allCells } from './grid.js';
 import { reachable } from './pathing.js';
+import { deadEndCells } from './shape.js';
 import { PRESETS } from './difficulty.js';
 import { emptyHazards, hitsHazard, stepHazards, spawnForApple, blockedKeys } from './hazards.js';
 
@@ -12,7 +13,10 @@ export function placeFood(snake, rng, blocked = new Set(), size = PRESETS.medium
   if (free.length === 0) return null;
   const reach = reachable(snake, blocked, size, pending);
   const onRoute = free.filter((c) => reach.has(cellKey(c)));
-  const pool = onRoute.length > 0 ? onRoute : free;
+  // Never in a single-tile dead end (the snake's body moves, so only hazards make them); the old pools are the fallback.
+  const dead = deadEndCells(blocked, size);
+  const open = onRoute.filter((c) => !dead.has(cellKey(c)));
+  const pool = open.length > 0 ? open : onRoute.length > 0 ? onRoute : free;
   return pool[Math.floor(rng() * pool.length)];
 }
 

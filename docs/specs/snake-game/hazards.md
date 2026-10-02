@@ -46,6 +46,13 @@ Obstacles that appear as the player eats apples and make the board harder: first
 - On each apple, the new food is placed first on a free, reachable cell, then the hazards for that apple are placed and checked against it.
 - Every enemy's moves are also checked: it will not step to a cell that would cut the route.
 
+**No islands:**
+- When a wall or a bomb is placed (first walls, spawned walls, re-laid walls, bombs), every cell of the board that is not a wall or bomb must stay connected (four-neighbour moves) to every other such cell. No cell and no group of cells may be cut off from the rest of the board by walls, bombs and the board edge. The snake's own body does not count as a barrier here, and enemies are ignored (they move). A placement that would create an island is rejected and retried like any other failed placement.
+
+**No dead-end apples:**
+- The apple is never placed in a single-tile-wide dead end, i.e. a spot where eating it would leave the snake with no way out except dying. Precisely: take the free cells (not a wall, bomb, enemy or the board edge; the snake's body is ignored because it moves) and repeatedly remove every cell that has at most one free neighbour left (this peels corridors that end in a dead end, however long). A cell removed this way is a dead end, and the apple is never placed on one. Placement prefers the cells that pass; only if none pass (a nearly full board) does it fall back to any reachable free cell.
+- A wall or bomb placement is also rejected if it would turn the cell the apple is on into such a dead end.
+
 **Collisions:**
 - The snake dies when its head enters a solid wall, a solid bomb, a live enemy, or a dead enemy.
 - A ghost is harmless to enter. A ghost enemy neither moves nor kills.
@@ -109,7 +116,9 @@ No new attack surface; hazards are internal game state.
   - each hazard appears exactly at its settings' apple trigger and not before, for any trigger from 1 to 100
   - segment placement: lengths, orientation, bounds, never on snake/food/obstacles, safe distance and lane exclusion, retry then skip
   - route check: finds a route, rejects a blocked one, honours tail vacating, counts ghosts as blocking
-  - food placement only on reachable free cells
+  - food placement only on reachable free cells, never on a dead-end cell when another cell is available
+  - dead-end detection: corridor of length 1 and longer, open areas and loops are not dead ends, a corridor that joins two open areas is not
+  - no islands: a placement that walls off one or more cells (including a corner cell) is rejected; connected placements are accepted; the snake body is ignored; enemies are ignored
   - bomb target: `min(max, count × (1 + floor((apples − trigger) ÷ rate)))` for the presets (Easy 1/4/6, Medium 1/4/12, Hard 2/1/20) and custom values; every bomb relocates on each apple; a bomb that cannot move stays put; a new bomb that cannot be placed is skipped
   - spawning walls: trigger, rate, count, size, and the spawned-cell maximum (first walls not counted)
   - enemies: first at the trigger, one more every rate apples up to the max, dead ones replaced on the next apple

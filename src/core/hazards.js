@@ -2,6 +2,7 @@ import { GRID_SIZE } from './config.js';
 import { VECTORS, cellKey, sameCell, inBounds, manhattan, neighbors } from './grid.js';
 import { hasRoute } from './pathing.js';
 import { PRESETS } from './difficulty.js';
+import { freeGridOfCells, gridHasIslands, cutsGrid, peel } from './shape.js';
 
 export const TELEGRAPH_STEPS = 24;
 // Each obstacle keeps the ghost time it was created with (24 for older objects).
@@ -89,15 +90,28 @@ const singleCandidate = (size) => (rng) => [
   { x: Math.floor(rng() * size), y: Math.floor(rng() * size) },
 ];
 
+
 // Try up to PLACEMENT_ATTEMPTS random candidates; return the first that is free,
 // safe (distance and lane from the head) and leaves a route to the food, else null.
-function tryPlace(world, makeCells, rng) {
+// With `solid` (walls and bombs, not enemies) the candidate must also keep the board in one piece and must not
+// turn the food's cell into a dead end it was not already. The cheap grid checks run before the route search.
+function tryPlace(world, makeCells, rng, solid) {
   const { snake, direction, food, hazards } = world;
   const size = sizeOf(world);
   const head = snake[0];
   const lane = laneKeys(head, direction);
   const taken = new Set([...snake.map(cellKey), ...blockedKeys(hazards)]);
   if (food) taken.add(cellKey(food));
+  const baseSolid = solid ? freeGridOfCells([...hazards.walls, ...hazards.bombs].flatMap((o) => o.cells), size) : null;
+  const baseAll = solid && food ? freeGridOfCells(hazardCells(hazards), size) : null;
+  const foodAt = food ? food.y * size + food.x : -1;
+  const connected = solid && !gridHasIslands(baseSolid, size);
+  const checkFood = baseAll !== null && !peel(baseAll, size)[foodAt];
+  const without = (grid, cells) => {
+    const copy = grid.slice();
+    cells.forEach((c) => { copy[c.y * size + c.x] = 0; });
+    return copy;
+  };
   for (let attempt = 0; attempt < PLACEMENT_ATTEMPTS; attempt++) {
     const cells = makeCells(rng);
     const ok = cells.every(
@@ -108,14 +122,21 @@ function tryPlace(world, makeCells, rng) {
         !lane.has(cellKey(c)),
     );
     if (!ok) continue;
+    if (solid) {
+      const idx = cells.map((c) => c.y * size + c.x);
+      // A connected board only needs the cut test; one that already has a hole must be fully re-checked.
+      if (connected ? cutsGrid(baseSolid, size, idx) : gridHasIslands(without(baseSolid, cells), size)) continue;
+    }
+    if (checkFood && peel(without(baseAll, cells), size)[foodAt]) continue;
     const blocked = new Set([...blockedKeys(hazards), ...cells.map(cellKey)]);
     if (hasRoute(snake, blocked, food, size, world.pending ?? 0)) return cells;
   }
   return null;
 }
 
-export const placeSegment = (world, length, rng) => tryPlace(world, segmentCandidate(length, sizeOf(world)), rng);
-export const placeCell = (world, rng) => tryPlace(world, singleCandidate(sizeOf(world)), rng);
+// `solid` is true for walls and bombs (the shape rules apply) and false for enemies.
+export const placeSegment = (world, length, rng, solid = true) => tryPlace(world, segmentCandidate(length, sizeOf(world)), rng, solid);
+export const placeCell = (world, rng) => tryPlace(world, singleCandidate(sizeOf(world)), rng, true);
 
 const spawnedWallCells = (h) =>
   h.walls.filter((w) => w.origin === 'spawn').reduce((total, w) => total + w.cells.length, 0);
@@ -183,11 +204,11 @@ export function spawnForApple(world, hazards, rng, apples, s = MEDIUM) {
       }
       // replace a dead enemy with a fresh ghost; keep it as an obstacle if no spot is found
       const others = { ...h, enemies: [...placed, ...old.slice(i + 1)] };
-      const cells = placeSegment({ ...world, hazards: others }, s.enemySize, rng);
+      const cells = placeSegment({ ...world, hazards: others }, s.enemySize, rng, false);
       placed.push(cells ? fresh(cells) : enemy);
     });
     while (placed.length < enemyTarget) {
-      const cells = placeSegment({ ...world, hazards: { ...h, enemies: placed } }, s.enemySize, rng);
+      const cells = placeSegment({ ...world, hazards: { ...h, enemies: placed } }, s.enemySize, rng, false);
       if (!cells) break;
       placed.push(fresh(cells));
     }
