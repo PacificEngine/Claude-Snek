@@ -11,8 +11,11 @@
 <body>
   <main>
     <header>
-      <span>Score: <strong id="score">0</strong></span>
-      <span>Best: <strong id="best">0</strong></span>
+      <div class="scores">
+        <span>Score: <strong id="score">0</strong></span>
+        <span id="best-wrap">Best: <strong id="best">0</strong></span>
+      </div>
+      <button id="difficulty-open" type="button" aria-label="Difficulty: Medium, choose difficulty">Difficulty: Medium</button>
       <button id="mute" type="button" data-action="mute" aria-pressed="false" aria-label="Mute (M)">Mute (M)</button>
     </header>
     <canvas id="board" width="400" height="400" aria-label="Snake game board"></canvas>
@@ -31,6 +34,23 @@
     </div>
     <p class="help">P pause · Enter restart · M mute</p>
   </main>
+    <dialog id="difficulty-dialog" aria-labelledby="difficulty-title">
+      <h2 id="difficulty-title">Difficulty</h2>
+      <label class="picker">Difficulty
+        <select id="difficulty-select" aria-label="Difficulty">
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      <p id="difficulty-note"></p>
+      <div id="difficulty-fields"></div>
+      <div class="dialog-actions">
+        <button id="difficulty-apply" type="button" aria-label="Apply difficulty and start a new game">Apply &amp; restart</button>
+        <button id="difficulty-cancel" type="button" aria-label="Close without changing">Cancel</button>
+      </div>
+    </dialog>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

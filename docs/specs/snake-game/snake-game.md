@@ -10,11 +10,13 @@ A single-player, browser-based Snake-style game. It's a personal learning projec
 
 ### Must Have
 - The snake moves continuously and turns with arrow keys or WASD. A 180° reversal is ignored.
-- Eating food grows the snake by one cell and raises the score.
+- Eating food raises the score by 1 and grows the snake by the Growth Count setting (1 cell per apple on Medium; fractional values carry over, 0 never grows; see `./difficulty.md`).
+- The board is a square grid whose size (10 to 50) comes from the active difficulty (Medium: 20).
+- A difficulty menu offers Easy, Medium, Hard and Custom. Presets are locked; Custom lets every setting be edited within its range. Easy, Medium and Hard each keep their own best score; Custom shows and saves none. The menu is only available when no run is in progress. See `./difficulty.md`.
 - Food spawns on a random empty cell, never on the snake.
 - The game ends when the snake hits the arena edge, itself, or a solid hazard (walls, bomb, enemy snake; see `./hazards.md`).
 - A restart is available after game over.
-- Game speed and music tempo increase once for every 4 apples eaten (not on every apple): BPM rises 4 per 4 apples, from 120 to 200 at the 80th apple.
+- Game speed and music tempo increase once for every 4 apples eaten (not on every apple): the base BPM rises 4 per 4 apples, from 120 to 200 at the 80th apple. The Game Speed Modifier of the active difficulty multiplies that BPM (Medium: 1.0).
 - The snake advances exactly one cell per sixteenth note of the music (rhythm-game feel): the music and the game share one beat clock, so every step lands on the beat grid.
 - Synthesized MIDI/chiptune-style background music plays during play: a 32-bar track (intro 4, verse 8, chorus 8, bridge 4, final chorus 8) in A minor with melody, a bass line, a synth kick on every quarter note and a synth hi-hat on every eighth note. Tempo rises with apples eaten (above), which also speeds up the game; the track keeps its place when the tempo changes.
 - The music grows more complex only as apples are eaten, in 10 tiers (one every 8 apples) that add layers on top of the 32-bar structure; the 80th apple reaches tier 10, a very complex loop with every layer playing:
@@ -47,7 +49,7 @@ A single-player, browser-based Snake-style game. It's a personal learning projec
 
 ### Nice to Have
 - Pause key
-- Persistent high score
+- Persistent high score per difficulty (none for Custom)
 - Visual polish (grid, colors)
 - A debug overlay showing FPS and tick rate
 
@@ -61,7 +63,7 @@ A single-player, browser-based Snake-style game. It's a personal learning projec
 ## Resilience
 No external dependencies. No resilience strategy required. Browser-feature fallbacks:
 - If Web Audio is unavailable or blocked, the game runs silently on the same step grid, driven by a timer at the same steps/sec.
-- If localStorage is unavailable, the high score doesn't persist and the game continues.
+- If localStorage is unavailable, the chosen difficulty, Custom values and best scores don't persist and the game continues.
 
 ## Observability
 - `console.error` for unexpected failures only (audio initialization, storage errors).
@@ -69,8 +71,8 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
 - Optional dev debug overlay (FPS, tick rate).
 
 ## Security
-- **Attack surface:** Keyboard and on-screen button (pointer) input only.
-- **Data:** No PII or credentials. The only stored value is the high score, which is validated as a finite non-negative number on read.
+- **Attack surface:** Keyboard, on-screen button (pointer) input, the difficulty menu's number inputs, and stored values.
+- **Data:** No PII or credentials. Stored values are the chosen difficulty, the Custom settings and one best score per preset difficulty; every one is validated on read (best scores as finite non-negative integers, settings field by field against their ranges and steps).
 - **Auth:** None.
 - **Compliance:** None required. Basic OWASP hygiene applies, and the page includes a restrictive Content-Security-Policy.
 
@@ -79,11 +81,12 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
 - Audio events are scheduled ahead on the audio clock so notes and snake steps do not drift apart; throttled background tabs must not cause bursts of notes.
 - Input latency under one tick, with no dropped keypresses or taps (a direction queue handles two quick presses). Buttons respond on `pointerdown`, so there is no tap delay.
 - Performance is checked manually in the browser. There's no load testing.
-- Scaling and growth don't apply: it's single-player and client-side, and the 20×20 grid keeps the work per frame bounded.
+- Scaling and growth don't apply: it's single-player and client-side. The grid is at most 50×50 (2,500 cells), which keeps the work per apple bounded; verify performance on a 50×50 Custom board.
 
 ## UX/UI
 - Clean, modern look: flat colors and rounded cells.
-- 20×20 grid.
+- Square grid from 10×10 to 50×50, set by the difficulty; the canvas stays the same pixel size, so cells shrink as the grid grows.
+- A Difficulty button opens a menu dialog (see `./difficulty.md`); it is disabled during a run. The best score shown is for the active preset and is hidden for Custom.
 - Playable with the keyboard or the on-screen buttons.
 - Touch layout: buttons are at least 48 px square, the D-pad sits below the board, the board scales to fit narrow screens (down to 320 px wide) without page scrolling, and double-tap zoom and text selection are suppressed on the controls (`touch-action: manipulation`).
 - Buttons have accessible names (`aria-label`) and a visible pressed state.
@@ -92,12 +95,13 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
 - Respects `prefers-reduced-motion`: nothing animates between steps; obstacle ghosts flash at most about 1.7 times per second (under the 3 per second limit) and become steady outlines under reduced motion (see `./hazards.md`).
 
 ## Architecture
-- **Core (pure):** `tick(state, rng) → state`, with input applied via `queueDirection(state, dir)`. No DOM or audio access.
+- **Core (pure):** `tick(state, rng) → state`, with input applied via `queueDirection(state, dir)`. The active `settings` (see `./difficulty.md`) live in the state and are passed to the places that need them. No DOM or audio access.
 - **Adapters:**
   - renderer (canvas)
   - input (keys and on-screen buttons → one shared set of actions)
   - audio (synthesized music: schedules the track's events for each step on the audio clock)
-  - storage (high score)
+  - storage (per-difficulty best scores, chosen difficulty, Custom settings)
+  - difficulty menu (a native dialog; edits Custom, shows presets locked)
 - **Beat clock (pure + adapter):** a conductor counts sixteenth-note steps and gives each step's time. Both the game step and the music events for step *n* are scheduled at that step's time. With no Web Audio it runs from a timer instead.
 - **Track (pure data):** the 32-bar arrangement indexed by step number (0-511, then loops); `eventsAt(step, tier)` returns what plays at that complexity tier (melody, harmony, counter-melody, arpeggio, bass, kick, snare, hi-hat, fill).
 - **`main.js`:** ties the pieces together around the beat clock.
@@ -114,7 +118,8 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
   - the tier curve (apples eaten to tier 0-10, one tier per 8 apples, capped at 10)
   - track lookup: which events fire on step *n* at each tier, layers appearing in the tier order above, kick on quarters, wraparound after 512 steps
   - tier changes deferred to the next bar line
-  - high-score validation
+  - high-score validation, per-difficulty keys, no Custom score
+  - difficulty presets, validation and growth: see `./difficulty.md`
   - button-to-action mapping (each button yields the same action as its key)
   - hazards: see `./hazards.md`
 - **Adapter tests:** Light tests with fakes, including the silent fallback when Web Audio is missing.
@@ -122,13 +127,13 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
 - **E2E:** None in v1.
 
 ## Data Model
-- Cell `{x, y}` on a 20×20 grid.
+- Cell `{x, y}` on an N×N grid (N from the active settings, 10 to 50).
 - Snake is an ordered array of cells, head first.
 - Direction is `up`, `down`, `left` or `right`, plus a queued next direction.
 - Food is a single cell.
-- State is `{snake, direction, food, score, status, hazards}`, with status `playing`, `paused` or `gameOver`; `hazards` is described in `./hazards.md`.
-- Stored: only `highScore` in localStorage.
-- Derived: apples eaten = snake length minus the starting length; BPM = f(floor(apples ÷ 4)); tier = min(10, floor(apples ÷ 8)); steps/sec and the step interval derive from BPM.
+- State is `{snake, direction, food, score, status, hazards, settings, growth}`, with status `playing`, `paused` or `gameOver`; `hazards` is described in `./hazards.md`, `settings` and `growth` in `./difficulty.md`.
+- Stored in localStorage: the chosen difficulty, the Custom settings, and one best score per preset difficulty (none for Custom).
+- Derived: apples eaten = the score (no longer the snake's length, because growth can differ from 1 per apple); BPM = f(floor(apples ÷ 4)); tier = min(10, floor(apples ÷ 8)); steps/sec and the step interval derive from BPM.
 - Beat clock: a step counter (0 at music start or restart) plus the audio-clock time of the next step.
 
 ## Decisions (resolved from earlier open questions)
@@ -136,6 +141,7 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
 - Music: 32-bar A-minor track with melody, bass, synth kick (quarters) and synth hi-hat (eighths); no audio files.
 - Pause stops the music; game over stops it; restart replays from bar 1.
 - Keys: `P` pause, `Enter` restart, `M` mute. Touch: D-pad, Pause and Restart buttons plus the Mute button, always visible on every device.
+- Difficulty: four choices (Easy, Medium, Hard, Custom) with 23 settings, defined in `./difficulty.md`. The Medium preset keeps the previous game.
 - Debug overlay: deferred.
 
 ## Open Questions
@@ -150,4 +156,5 @@ No external dependencies. No resilience strategy required. Browser-feature fallb
 - Mute toggle: covered in this spec
 - Pause, high score, visual polish: nice-to-haves, covered in this spec
 - Touch controls (D-pad, Pause, Restart, Mute buttons): covered in this spec
-- Hazards (walls, bomb, enemy snake, re-laid and fading walls) → `./hazards.md` [complex, has its own spec]
+- Hazards (walls, bombs, enemy snakes, re-laid and fading hazards) → `./hazards.md` [complex, has its own spec]
+- Difficulty menu, presets, Custom settings and per-difficulty best scores → `./difficulty.md` [complex, has its own spec]

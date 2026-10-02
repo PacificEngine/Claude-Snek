@@ -3,11 +3,11 @@ body { margin: 0; min-height: 100vh; min-height: 100dvh; display: grid; place-it
        background: var(--bg); color: var(--ink); font-family: system-ui, sans-serif;
        touch-action: manipulation; }
 main { text-align: center; width: min(100vw - 1.5rem, 420px); padding: 0.5rem 0; }
-header { display: flex; gap: 1.5rem; justify-content: center; align-items: center;
+header { display: flex; gap: 0.25rem 0.5rem; justify-content: center; align-items: center;
          margin-bottom: 0.5rem; font-size: 1.1rem; }
 canvas { width: min(100%, 400px);
-         /* 336px = vertical chrome (header, message, controls, spacing), tuned to this layout */
-         width: min(100%, 400px, calc(100dvh - 336px)); height: auto; aspect-ratio: 1;
+         /* 353px = vertical chrome (two-row header of about 73px, message, controls, spacing), tuned to this layout */
+         width: min(100%, 400px, calc(100dvh - 353px)); height: auto; aspect-ratio: 1;
          background: var(--board); border-radius: 12px; box-shadow: 0 4px 16px rgb(0 0 0 / 12%); }
 button { font: inherit; padding: 0.25rem 0.75rem; border-radius: 8px; border: 1px solid #9aa5b1;
          background: #fff; color: var(--ink); cursor: pointer; }
@@ -27,3 +27,25 @@ button { font: inherit; padding: 0.25rem 0.75rem; border-radius: 8px; border: 1p
                    -webkit-tap-highlight-color: transparent; }
 .controls button:active, #mute:active { background: #dbe4ee; transform: scale(0.96); }
 #mute[aria-pressed="true"] { background: #dbe4ee; }
+
+header { flex-wrap: wrap; }
+.scores { flex: 1 0 100%; display: flex; justify-content: center; gap: 1.5rem; }
+#difficulty-open, #mute { min-height: 48px; padding: 0.25rem 0.5rem; font-size: 1rem; }
+#difficulty-open { flex: 1 1 auto; }
+#mute { flex: 0 0 auto; }
+#difficulty-open:disabled { opacity: 0.5; cursor: not-allowed; }
+#best-wrap[hidden] { display: none; }
+
+dialog { width: min(100vw - 1rem, 480px); max-height: 90dvh; overflow: auto; border: 1px solid #9aa5b1;
+         border-radius: 12px; padding: 1rem; text-align: left; color: var(--ink); background: #fff; }
+dialog::backdrop { background: rgb(0 0 0 / 40%); }
+dialog h2 { margin: 0 0 0.5rem; }
+.picker { display: grid; gap: 0.25rem; font-weight: 600; }
+.picker select { min-height: 48px; font: inherit; }
+#difficulty-fields fieldset { margin: 0.75rem 0 0; border: 1px solid #d5dce3; border-radius: 8px; padding: 0.5rem; }
+#difficulty-fields legend { font-weight: 600; padding: 0 0.25rem; }
+.field { display: grid; gap: 0.15rem; margin: 0.4rem 0; font-size: 0.9rem; }
+.field input { min-height: 44px; font: inherit; padding: 0 0.5rem; }
+.field input.locked, .field input[readonly] { background: #eef1f4; color: #52606d; }
+.dialog-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; position: sticky; bottom: 0; background: #fff; padding-top: 0.5rem; }
+.dialog-actions button { min-height: 48px; }

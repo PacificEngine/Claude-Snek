@@ -1,38 +1,42 @@
-import { GRID_SIZE, START_LENGTH } from './config.js';
+import { GRID_SIZE } from './config.js';
 import { VECTORS, cellKey, sameCell, inBounds, manhattan, neighbors } from './grid.js';
 import { hasRoute } from './pathing.js';
-import { musicTier } from './pacing.js';
+import { PRESETS } from './difficulty.js';
 
 export const TELEGRAPH_STEPS = 24;
-// Ghost time for an obstacle placed on this apple: it shrinks as the game goes on.
-export const telegraphFor = (apples) => (apples > 120 ? 6 : apples > 60 ? 12 : TELEGRAPH_STEPS);
 // Each obstacle keeps the ghost time it was created with (24 for older objects).
 const ghostTime = (obj) => obj.telegraph ?? TELEGRAPH_STEPS;
 export const SAFE_DISTANCE = 5;
 export const LANE_LENGTH = 10;
 export const PLACEMENT_ATTEMPTS = 50;
-export const WALL_CELL_CAP = 80;
+// Fallback only, for objects created without a `fadeSteps` of their own.
 export const FADE_STEPS = 40;
-export const FADE_APPLES = 100;
 export const FLASH_PERIOD = 4;
 const ENEMY_MOVE_EVERY = 2;
 
-export const MAX_BOMBS = 12;
-const FIRST_BOMB_APPLE = 32;
-const APPLES_PER_BOMB = 4;
-// How many bombs there should be after this apple: 1 at apple 32, +1 every 4th apple, max 12.
-export const bombCountFor = (apples) =>
-  apples < FIRST_BOMB_APPLE
-    ? 0
-    : Math.min(MAX_BOMBS, 1 + Math.floor((apples - FIRST_BOMB_APPLE) / APPLES_PER_BOMB));
+const MEDIUM = PRESETS.medium;
 
-export const emptyHazards = () => ({ walls: [], bombs: [], enemy: null });
+// Ghost time for an obstacle placed on this apple: the setting, halved after apple 60 and again after 120.
+export const telegraphFor = (apples, base = TELEGRAPH_STEPS) =>
+  apples > 120 ? Math.round(base / 4) : apples > 60 ? Math.round(base / 2) : base;
+
+// How many bombs there should be after this apple.
+export const bombCountFor = (apples, s = MEDIUM) =>
+  apples < s.bombTrigger
+    ? 0
+    : Math.min(s.bombMax, s.bombCount * (1 + Math.floor((apples - s.bombTrigger) / s.bombRate)));
+
+// How many enemies there should be after this apple.
+export const enemyTargetFor = (apples, s = MEDIUM) =>
+  apples < s.enemyTrigger ? 0 : Math.min(s.enemyMax, 1 + Math.floor((apples - s.enemyTrigger) / s.enemyRate));
+
+export const emptyHazards = () => ({ walls: [], bombs: [], enemies: [] });
 
 export function hazardCells(h) {
   return [
     ...h.walls.flatMap((w) => w.cells),
     ...h.bombs.flatMap((b) => b.cells),
-    ...(h.enemy ? h.enemy.cells : []),
+    ...h.enemies.flatMap((e) => e.cells),
   ];
 }
 
@@ -47,18 +51,20 @@ export function hitsHazard(h, cell, snake) {
   const at = (cells) => cells.some((c) => sameCell(c, cell));
   if (h.walls.some((w) => at(w.cells) && isSolid(w, snake))) return true;
   if (h.bombs.some((b) => at(b.cells) && isSolid(b, snake))) return true;
-  if (h.enemy && h.enemy.status !== 'ghost' && at(h.enemy.cells)) return true;
+  if (h.enemies.some((e) => e.status !== 'ghost' && at(e.cells))) return true;
   return false;
 }
 
 export const isGhostVisible = (age, reducedMotion = false, telegraph = TELEGRAPH_STEPS) =>
   reducedMotion || age >= telegraph - FLASH_PERIOD || Math.floor(age / FLASH_PERIOD) % 2 === 0;
 
-export function wallOpacity(wall) {
-  const ghost = ghostTime(wall);
-  if (!wall.fades || wall.age < ghost) return 1;
-  return Math.max(0, 1 - (wall.age - ghost) / FADE_STEPS);
+export function fadeOpacity(obj) {
+  const ghost = ghostTime(obj);
+  if (!obj.fades || obj.age < ghost) return 1;
+  return Math.max(0, 1 - (obj.age - ghost) / (obj.fadeSteps ?? FADE_STEPS));
 }
+
+const sizeOf = (world) => world.size ?? GRID_SIZE;
 
 function laneKeys(head, direction) {
   const v = VECTORS[direction];
@@ -67,11 +73,11 @@ function laneKeys(head, direction) {
   return keys;
 }
 
-function segmentCandidate(length) {
+function segmentCandidate(length, size) {
   return (rng) => {
     const horizontal = rng() < 0.5;
-    const x = Math.floor(rng() * (horizontal ? GRID_SIZE - length + 1 : GRID_SIZE));
-    const y = Math.floor(rng() * (horizontal ? GRID_SIZE : GRID_SIZE - length + 1));
+    const x = Math.floor(rng() * (horizontal ? size - length + 1 : size));
+    const y = Math.floor(rng() * (horizontal ? size : size - length + 1));
     return Array.from({ length }, (_, i) => ({
       x: horizontal ? x + i : x,
       y: horizontal ? y : y + i,
@@ -79,14 +85,15 @@ function segmentCandidate(length) {
   };
 }
 
-const singleCandidate = (rng) => [
-  { x: Math.floor(rng() * GRID_SIZE), y: Math.floor(rng() * GRID_SIZE) },
+const singleCandidate = (size) => (rng) => [
+  { x: Math.floor(rng() * size), y: Math.floor(rng() * size) },
 ];
 
 // Try up to PLACEMENT_ATTEMPTS random candidates; return the first that is free,
 // safe (distance and lane from the head) and leaves a route to the food, else null.
 function tryPlace(world, makeCells, rng) {
   const { snake, direction, food, hazards } = world;
+  const size = sizeOf(world);
   const head = snake[0];
   const lane = laneKeys(head, direction);
   const taken = new Set([...snake.map(cellKey), ...blockedKeys(hazards)]);
@@ -95,47 +102,41 @@ function tryPlace(world, makeCells, rng) {
     const cells = makeCells(rng);
     const ok = cells.every(
       (c) =>
-        inBounds(c) &&
+        inBounds(c, size) &&
         !taken.has(cellKey(c)) &&
         manhattan(c, head) >= SAFE_DISTANCE &&
         !lane.has(cellKey(c)),
     );
     if (!ok) continue;
     const blocked = new Set([...blockedKeys(hazards), ...cells.map(cellKey)]);
-    if (hasRoute(snake, blocked, food)) return cells;
+    if (hasRoute(snake, blocked, food, size, world.pending ?? 0)) return cells;
   }
   return null;
 }
 
-export const placeSegment = (world, length, rng) => tryPlace(world, segmentCandidate(length), rng);
-export const placeCell = (world, rng) => tryPlace(world, singleCandidate, rng);
+export const placeSegment = (world, length, rng) => tryPlace(world, segmentCandidate(length, sizeOf(world)), rng);
+export const placeCell = (world, rng) => tryPlace(world, singleCandidate(sizeOf(world)), rng);
 
-const INITIAL_SEGMENTS = 4;
-const INITIAL_LENGTH = 3;
-const PER_APPLE_LENGTH = 2;
-const ENEMY_LENGTH = 3;
+const spawnedWallCells = (h) =>
+  h.walls.filter((w) => w.origin === 'spawn').reduce((total, w) => total + w.cells.length, 0);
 
-const wallCellCount = (h) => h.walls.reduce((total, w) => total + w.cells.length, 0);
-
-// Hazards after an apple is eaten. `world.food` is the newly placed food;
-// `apples` is the score after eating. Existing hazards are not aged here.
-export function spawnForApple(world, hazards, rng, apples) {
-  const tierAt = (n) => musicTier(n + START_LENGTH);
-  const tier = tierAt(apples);
-  const crossed = (t) => tier >= t && tierAt(apples - 1) < t;
-  const telegraph = telegraphFor(apples);
+// Hazards after an apple is eaten. `world.food` is the newly placed food; `apples` is the score
+// after eating; `s` is the active settings. Existing hazards are not aged here.
+export function spawnForApple(world, hazards, rng, apples, s = MEDIUM) {
+  const telegraph = telegraphFor(apples, s.ghostTime);
+  const fade = { fades: apples >= s.invisibleTrigger, fadeSteps: s.invisibleTiming };
   let h = hazards;
   const at = () => ({ ...world, hazards: h });
-  const addWall = (length, fades = false) => {
+  const addWall = (length, origin) => {
     const cells = placeSegment(at(), length, rng);
-    if (cells) h = { ...h, walls: [...h.walls, { cells, age: 0, telegraph, fades }] };
+    if (cells) h = { ...h, walls: [...h.walls, { cells, age: 0, telegraph, origin, ...fade }] };
   };
 
-  if (crossed(2)) {
-    for (let i = 0; i < INITIAL_SEGMENTS; i++) addWall(INITIAL_LENGTH);
+  if (apples === s.wallTrigger) {
+    for (let i = 0; i < s.wallCount; i++) addWall(s.wallSize, 'first');
   }
 
-  const wanted = bombCountFor(apples);
+  const wanted = bombCountFor(apples, s);
   if (wanted > 0) {
     // Every bomb jumps on every apple, one at a time. A bomb that cannot be moved
     // keeps its old cell; a new bomb that cannot be placed is skipped (retried next apple).
@@ -144,39 +145,58 @@ export function spawnForApple(world, hazards, rng, apples) {
     for (let i = 0; i < wanted; i++) {
       const others = { ...h, bombs: [...placed, ...old.slice(i + 1)] };
       const cells = placeCell({ ...world, hazards: others }, rng);
-      if (cells) placed.push({ cells, age: 0, telegraph });
+      if (cells) placed.push({ cells, age: 0, telegraph, ...fade });
       else if (old[i]) placed.push(old[i]);
     }
     h = { ...h, bombs: placed };
   }
 
-  if (tier >= 6 && wallCellCount(h) + PER_APPLE_LENGTH <= WALL_CELL_CAP) {
-    addWall(PER_APPLE_LENGTH);
+  if (apples >= s.wallSpawnTrigger && (apples - s.wallSpawnTrigger) % s.wallSpawnRate === 0) {
+    for (let i = 0; i < s.wallSpawnCount; i++) {
+      if (spawnedWallCells(h) + s.wallSpawnSize > s.wallSpawnMax) break;
+      addWall(s.wallSpawnSize, 'spawn');
+    }
   }
 
-  if (tier >= 10) {
+  if (apples >= s.movingWallTrigger) {
     // One wall at a time; a wall that cannot be re-laid keeps its old place.
-    const fades = apples >= FADE_APPLES;
     const old = h.walls;
     const placed = [];
     old.forEach((wall, i) => {
       const others = { ...h, walls: [...placed, ...old.slice(i + 1)] };
       const cells = placeSegment({ ...world, hazards: others }, wall.cells.length, rng);
-      placed.push(cells ? { cells, age: 0, telegraph, fades } : wall);
+      placed.push(cells ? { ...wall, cells, age: 0, telegraph, ...fade } : wall);
     });
     h = { ...h, walls: placed };
   }
 
-  if (tier >= 8 && (!h.enemy || h.enemy.status === 'dead')) {
-    const without = { ...h, enemy: null };
-    const cells = placeSegment({ ...world, hazards: without }, ENEMY_LENGTH, rng);
-    if (cells) h = { ...h, enemy: { cells, age: 0, telegraph, status: 'ghost' } };
+  const enemyTarget = enemyTargetFor(apples, s);
+  if (enemyTarget > 0) {
+    const fresh = (cells) => ({ cells, age: 0, telegraph, status: 'ghost' });
+    const old = h.enemies;
+    const placed = [];
+    old.forEach((enemy, i) => {
+      if (enemy.status !== 'dead') {
+        placed.push(enemy);
+        return;
+      }
+      // replace a dead enemy with a fresh ghost; keep it as an obstacle if no spot is found
+      const others = { ...h, enemies: [...placed, ...old.slice(i + 1)] };
+      const cells = placeSegment({ ...world, hazards: others }, s.enemySize, rng);
+      placed.push(cells ? fresh(cells) : enemy);
+    });
+    while (placed.length < enemyTarget) {
+      const cells = placeSegment({ ...world, hazards: { ...h, enemies: placed } }, s.enemySize, rng);
+      if (!cells) break;
+      placed.push(fresh(cells));
+    }
+    h = { ...h, enemies: placed };
   }
 
   return h;
 }
 
-function stepEnemy(enemy, { snake, food, walls, bombs }, rng) {
+function stepEnemy(enemy, { snake, food, others, size = GRID_SIZE, pending = 0 }, rng) {
   if (enemy.status === 'dead') return enemy;
   if (enemy.status === 'ghost') {
     const live = enemy.age >= ghostTime(enemy) && !overlapsSnake(enemy.cells, snake);
@@ -184,26 +204,30 @@ function stepEnemy(enemy, { snake, food, walls, bombs }, rng) {
   }
   if (enemy.age % ENEMY_MOVE_EVERY !== 0) return enemy;
 
-  const others = blockedKeys({ walls, bombs, enemy: null });
   const snakeKeys = new Set(snake.map(cellKey));
-  const ownBody = new Set(enemy.cells.slice(0, -1).map(cellKey)); // the tail cell is vacated
-  const options = neighbors(enemy.cells[0]).filter((n) => {
+  const ownBody = new Set(enemy.cells.slice(0, Math.max(2, enemy.cells.length - 1)).map(cellKey)); // the tail is vacated, but the neck never is
+  const options = neighbors(enemy.cells[0], size).filter((n) => {
     const key = cellKey(n);
     if (others.has(key) || snakeKeys.has(key) || ownBody.has(key)) return false;
     const moved = [n, ...enemy.cells.slice(0, -1)];
     const withEnemy = new Set([...others, ...moved.map(cellKey)]);
-    return hasRoute(snake, withEnemy, food);
+    return hasRoute(snake, withEnemy, food, size, pending);
   });
   if (options.length === 0) return { ...enemy, status: 'dead' };
   const pick = options[Math.floor(rng() * options.length)];
   return { ...enemy, cells: [pick, ...enemy.cells.slice(0, -1)] };
 }
 
-// One game step for every hazard: everything ages, and the enemy may move or die.
-export function stepHazards(hazards, { snake, food }, rng) {
+// One game step for every hazard: everything ages, and each enemy may move or die.
+// Enemies move one after another, so later ones see where earlier ones now are.
+export function stepHazards(hazards, { snake, food, size, pending }, rng) {
   const walls = hazards.walls.map((w) => ({ ...w, age: w.age + 1 }));
   const bombs = hazards.bombs.map((b) => ({ ...b, age: b.age + 1 }));
-  let enemy = hazards.enemy && { ...hazards.enemy, age: hazards.enemy.age + 1 };
-  if (enemy) enemy = stepEnemy(enemy, { snake, food, walls, bombs }, rng);
-  return { walls, bombs, enemy };
+  const enemies = hazards.enemies.map((e) => ({ ...e, age: e.age + 1 }));
+  for (let i = 0; i < enemies.length; i++) {
+    const rest = enemies.filter((_, j) => j !== i);
+    const others = blockedKeys({ walls, bombs, enemies: rest });
+    enemies[i] = stepEnemy(enemies[i], { snake, food, others, size, pending }, rng);
+  }
+  return { walls, bombs, enemies };
 }

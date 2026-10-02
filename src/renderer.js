@@ -1,5 +1,5 @@
 import { GRID_SIZE } from './core/config.js';
-import { emptyHazards, isSolid, isGhostVisible, wallOpacity } from './core/hazards.js';
+import { emptyHazards, isSolid, isGhostVisible, fadeOpacity } from './core/hazards.js';
 
 const SNAKE_COLOR = '#1f7a5c';
 const HEAD_COLOR = '#14573f';
@@ -14,10 +14,10 @@ const DEAD_COLOR = '#9ca3af';
 const GHOST_STROKE = '#475569';
 const GHOST_FILL = 'rgba(100, 116, 139, 0.18)';
 
-function drawGrid(ctx, size) {
+function drawGrid(ctx, size, count) {
   ctx.strokeStyle = GRID_COLOR;
   ctx.lineWidth = 1;
-  for (let i = 1; i < GRID_SIZE; i++) {
+  for (let i = 1; i < count; i++) {
     ctx.beginPath();
     ctx.moveTo(i * size, 0); ctx.lineTo(i * size, ctx.canvas.height);
     ctx.moveTo(0, i * size); ctx.lineTo(ctx.canvas.width, i * size);
@@ -51,7 +51,7 @@ function drawWalls(ctx, state, size, pad, reducedMotion) {
       drawGhost(ctx, wall, size, pad, reducedMotion);
       return;
     }
-    const opacity = wallOpacity(wall);
+    const opacity = fadeOpacity(wall);
     if (opacity <= 0) return;
     ctx.save();
     ctx.globalAlpha = opacity;
@@ -71,10 +71,14 @@ function drawBombs(ctx, state, size, pad, reducedMotion) {
       drawGhost(ctx, bomb, size, pad, reducedMotion);
       return;
     }
+    const opacity = fadeOpacity(bomb);
+    if (opacity <= 0) return;
     const { x, y } = bomb.cells[0];
     const cx = (x + 0.5) * size;
     const cy = (y + 0.5) * size;
     const r = size * 0.42;
+    ctx.save();
+    ctx.globalAlpha = opacity;
     ctx.fillStyle = BOMB_COLOR;
     ctx.beginPath();
     ctx.moveTo(cx, cy - r);
@@ -87,12 +91,15 @@ function drawBombs(ctx, state, size, pad, reducedMotion) {
     ctx.beginPath();
     ctx.arc(cx + r * 0.45, cy - r * 0.45, size * 0.1, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   });
 }
 
-function drawEnemy(ctx, state, size, pad, reducedMotion) {
-  const enemy = state.hazards.enemy;
-  if (!enemy) return;
+function drawEnemies(ctx, state, size, pad, reducedMotion) {
+  state.hazards.enemies.forEach((enemy) => drawEnemy(ctx, enemy, size, pad, reducedMotion));
+}
+
+function drawEnemy(ctx, enemy, size, pad, reducedMotion) {
   if (enemy.status === 'ghost') {
     drawGhost(ctx, enemy, size, pad, reducedMotion, ENEMY_COLOR);
     return;
@@ -116,15 +123,16 @@ function drawEnemy(ctx, state, size, pad, reducedMotion) {
 
 export function render(ctx, state, options = {}) {
   const reducedMotion = options.reducedMotion ?? false;
-  const size = ctx.canvas.width / GRID_SIZE;
+  const count = state.settings?.gridSize ?? GRID_SIZE;
+  const size = ctx.canvas.width / count;
   const pad = size * 0.08;
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  drawGrid(ctx, size);
+  drawGrid(ctx, size, count);
 
   const view = { ...state, hazards: state.hazards ?? emptyHazards() };
   drawWalls(ctx, view, size, pad, reducedMotion);
   drawBombs(ctx, view, size, pad, reducedMotion);
-  drawEnemy(ctx, view, size, pad, reducedMotion);
+  drawEnemies(ctx, view, size, pad, reducedMotion);
 
   state.snake.forEach((cell, i) => {
     ctx.fillStyle = i === 0 ? HEAD_COLOR : SNAKE_COLOR;
