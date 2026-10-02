@@ -184,7 +184,7 @@ describe('music settings in the menu', () => {
   });
   it('never writes the roll into the player\'s draft music', () => {
     const assigns = [...menu.matchAll(/draftMusic = ([^;]*);/g)].map((m) => m[1]);
-    expect(assigns).toEqual(['copySettings(DEFAULT_MUSIC)', 'applyEdit(draftMusic, field, raw)', 'copySettings(DEFAULT_MUSIC)', 'copySettings(current.music)']);
+    expect(assigns).toEqual(['copySettings(DEFAULT_MUSIC)', 'applyEdit(draftMusic, field, raw)', 'copySettings(DEFAULT_MUSIC)', 'randomMusic(rng)', 'copySettings(current.music)']);
     expect(menu).toContain('draftMusic = copySettings(current.music)');
   });
   it('has a Reset to default button inside the Music fieldset', () => {
@@ -220,5 +220,35 @@ describe('music settings in the menu', () => {
     expect(body('advance')).toContain('settings = nextSettings()');
     expect(body('applyDifficulty')).toContain("settingsWithMusic('random', roll, music)");
     expect(body('applyDifficulty')).toContain('nextSettings()');
+  });
+});
+
+describe('Reroll and Randomize buttons', () => {
+  const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
+  const fn = (name) => menu.slice(menu.indexOf(`function ${name}(`), menu.indexOf('\n  }\n', menu.indexOf(`function ${name}(`)));
+  it('has a Reroll button with its visible text in its accessible name', () => {
+    expect(menu).toContain("rerollBtn.type = 'button'");
+    expect(menu).toContain("rerollBtn.textContent = 'Reroll'");
+    expect(menu).toContain("'Reroll, random settings'");
+  });
+  it('rerolls a fresh roll from the injected rng, music included, and refreshes', () => {
+    expect(menu).toMatch(/rerollBtn\.addEventListener\('click', \(\) => \{\s*draftRoll = settingsFor\('random', null, rng\);\s*refresh\(\);/);
+  });
+  it('shows and enables Reroll only while Random is selected', () => {
+    expect(fn('refresh')).toContain("rerollBtn.hidden = draftDifficulty !== 'random'");
+    expect(fn('refresh')).toContain("rerollBtn.disabled = draftDifficulty !== 'random'");
+    expect(css).toMatch(/\.reroll\[hidden\][^{]*\{[^}]*display:\s*none/);
+    expect(css).toMatch(/\.reroll[^{]*\{[^}]*min-height:\s*44px/);
+  });
+  it('has a Randomize button next to Reset inside the Music fieldset', () => {
+    expect(menu).toContain("randomizeBtn.textContent = 'Randomize'");
+    expect(menu).toContain("'Randomize, music'");
+    expect(menu).toContain('musicEl.append(resetBtn, randomizeBtn)');
+    expect(css).toMatch(/\.music-randomize[^{]*\{[^}]*min-height:\s*44px/);
+  });
+  it('randomizes only the draft music with randomMusic(rng), disabled while Random is selected', () => {
+    expect(menu).toMatch(/randomizeBtn\.addEventListener\('click', \(\) => \{\s*draftMusic = randomMusic\(rng\);\s*showMusic\(\);/);
+    expect(fn('showMusic')).toContain('randomizeBtn.disabled = rolled');
   });
 });

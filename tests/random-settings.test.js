@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FIELDS, MUSIC_FIELDS, randomSettings, sanitize } from '../src/core/difficulty.js';
+import { FIELDS, MUSIC_FIELDS, randomMusic, randomSettings, sanitize } from '../src/core/difficulty.js';
 
 const seeded = (seed) => {
   let a = seed;
@@ -138,5 +138,32 @@ describe('randomSettings', () => {
     const real = Math.random;
     Math.random = () => { throw new Error('Math.random used'); };
     try { randomSettings(seeded(3)); } finally { Math.random = real; }
+  });
+});
+
+describe('randomMusic', () => {
+  const musics = SEEDS.map((seed) => randomMusic(seeded(seed)));
+  it('returns exactly the eleven music keys', () => {
+    musics.forEach((m) => expect(Object.keys(m).sort()).toEqual(MUSIC_FIELDS.map((f) => f.key).sort()));
+  });
+  it('forms the ramp: whole numbers 0..100, sorted v[0] = 0 and v[k] <= 10k', () => {
+    musics.forEach((m) => {
+      const sorted = Object.values(m).sort((x, y) => x - y);
+      sorted.forEach((v, k) => {
+        expect(Number.isInteger(v)).toBe(true);
+        expect(v).toBeLessThanOrEqual(10 * k);
+      });
+      expect(sorted[0]).toBe(0);
+    });
+  });
+  it('is deterministic for a seed and shuffles which instrument is early', () => {
+    expect(randomMusic(seeded(5))).toEqual(randomMusic(seeded(5)));
+    expect(new Set(musics.map((m) => m.snareTrigger)).size).toBeGreaterThan(20);
+    expect(new Set(musics.map((m) => JSON.stringify(m))).size).toBeGreaterThan(250);
+  });
+  it('is the music part of a Random roll', () => {
+    const roll = randomSettings(seeded(9));
+    MUSIC_FIELDS.forEach((f) => expect(roll[f.key]).toBeGreaterThanOrEqual(0));
+    expect(Object.keys(randomMusic(() => 0.5))).toHaveLength(11);
   });
 });

@@ -161,6 +161,17 @@ const randomCap = (field, cells) => {
   return cap ? Math.min(field.max, Math.max(cap[0], Math.floor(cap[1] * cells))) : field.max;
 };
 
+// The eleven music triggers as a build-up: the k-th earliest is at most 10k (so one is 0, two are within 10 ... all within 100),
+// then a Fisher-Yates shuffle decides which instrument gets which value.
+export function randomMusic(rng) {
+  const ramp = MUSIC_FIELDS.map((_, k) => pick(rng, 0, RAMP_STEP * k));
+  for (let i = ramp.length - 1; i > 0; i--) {
+    const j = Math.min(i, Math.floor(rng() * (i + 1)));
+    [ramp[i], ramp[j]] = [ramp[j], ramp[i]];
+  }
+  return Object.fromEntries(MUSIC_FIELDS.map((field, i) => [field.key, ramp[i]]));
+}
+
 // A complete, valid settings object with every field rolled from the injected `rng` (() => [0, 1)).
 // Grid size is rolled first (it leads FIELDS) because the caps on snake length and hazard counts depend on it.
 export function randomSettings(rng) {
@@ -175,15 +186,7 @@ export function randomSettings(rng) {
     settings[field.key] = pick(rng, min, max, field.step);
   });
   // The roll carries its own music triggers; they are for that game only and never replace the player's.
-  // The music builds up: the k-th earliest trigger is at most 10k (so one is 0, two are within 10 ... all within 100),
-  // then a Fisher-Yates shuffle decides which instrument gets which value.
-  const ramp = MUSIC_FIELDS.map((_, k) => pick(rng, 0, RAMP_STEP * k));
-  for (let i = ramp.length - 1; i > 0; i--) {
-    const j = Math.min(i, Math.floor(rng() * (i + 1)));
-    [ramp[i], ramp[j]] = [ramp[j], ramp[i]];
-  }
-  MUSIC_FIELDS.forEach((field, i) => { settings[field.key] = ramp[i]; });
-  return settings;
+  return { ...settings, ...randomMusic(rng) };
 }
 
 // What the engine runs: the player's global music with every difficulty, but a Random roll keeps its own.
