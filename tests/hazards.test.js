@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   emptyHazards, hazardCells, blockedKeys, isSolid, hitsHazard,
   isGhostVisible, fadeOpacity, placeSegment, placeCell, spawnForApple, stepHazards,
-  telegraphFor, bombCountFor, enemyTargetFor, SAFE_DISTANCE, LANE_LENGTH,
+  halveFor, bombCountFor, enemyTargetFor, SAFE_DISTANCE, LANE_LENGTH,
 } from '../src/core/hazards.js';
 import { PRESETS } from '../src/core/difficulty.js';
 import { hasRoute } from '../src/core/pathing.js';
@@ -362,19 +362,34 @@ describe('stepHazards', () => {
   });
 });
 
-describe('ghost time by apple count', () => {
-  it('is 24 steps up to and including apple 60', () => {
-    expect(telegraphFor(0)).toBe(24);
-    expect(telegraphFor(16)).toBe(24);
-    expect(telegraphFor(60)).toBe(24);
+describe('halveFor', () => {
+  const H = [60, 120, 180, 240];
+  const series = (base, halves = H) => [60, 61, 121, 181, 241].map((a) => halveFor(base, a, halves));
+  it('halves once per trigger passed, never at the trigger itself', () => {
+    expect(series(24)).toEqual([24, 12, 6, 3, 2]); // ceil(3 / 2) = 2
   });
-  it('is 12 steps from apple 61 to apple 120', () => {
-    expect(telegraphFor(61)).toBe(12);
-    expect(telegraphFor(120)).toBe(12);
+  it('matches the Easy and Hard ghost times', () => {
+    expect(series(36)).toEqual([36, 18, 9, 5, 3]);
+    expect(series(12)).toEqual([12, 6, 3, 2, 1]);
   });
-  it('is 6 steps from apple 121 on', () => {
-    expect(telegraphFor(121)).toBe(6);
-    expect(telegraphFor(500)).toBe(6);
+  it('counts a duplicate trigger twice', () => {
+    expect(halveFor(24, 60, [60, 60])).toBe(24);
+    expect(halveFor(24, 61, [60, 60])).toBe(6);
+  });
+  it('does not need the list to be sorted', () => {
+    expect(halveFor(24, 130, [120, 60])).toBe(6);
+    expect(halveFor(24, 70, [120, 60])).toBe(12);
+  });
+  it('does not halve with an empty or missing list', () => {
+    expect(halveFor(24, 500, [])).toBe(24);
+    expect(halveFor(24, 500)).toBe(24);
+  });
+  it('keeps 0 at 0', () => {
+    expect(halveFor(0, 500, H)).toBe(0);
+  });
+  it('rounds every halving up', () => {
+    expect(halveFor(25, 70, [60])).toBe(13);
+    expect(halveFor(25, 130, [60, 120])).toBe(7);
   });
 });
 
@@ -416,7 +431,7 @@ describe('spawnForApple stamps the ghost time', () => {
     expect(h.walls.length).toBeGreaterThan(0);
     expect(h.walls.every((x) => x.telegraph === 24)).toBe(true);
   });
-  it('stamps 12 after apple 60 and 6 after apple 120 on a new bomb and a new wall', () => {
+  it('stamps the halved ghost time (12 after the first trigger, 6 after the second) on a new bomb and a new wall', () => {
     const at61 = spawnForApple(world(), emptyHazards(), seeded(2), 61);
     expect(at61.bombs[0].telegraph).toBe(12);
     expect(at61.walls).toHaveLength(1);
@@ -601,21 +616,39 @@ describe('placement on other board sizes', () => {
   });
 });
 
+describe('invisible timing halves', () => {
+  const W = () => ({ snake, direction: 'right', food: { x: 3, y: 3 } });
+  const timing = (apples, over = {}) => {
+    const s = { ...PRESETS.medium, invisibleTrigger: 1, wallTrigger: apples, bombTrigger: 99, wallSpawnTrigger: 99, enemyTrigger: 99, ...over };
+    return spawnForApple(W(), emptyHazards(), seeded(1), apples, s).walls[0].fadeSteps;
+  };
+  it('halves the timing after each invisible half trigger (Medium 16, 8, 4, 2, 1)', () => {
+    expect([200, 201, 401, 601, 801].map((a) => timing(a))).toEqual([16, 8, 4, 2, 1]);
+  });
+  it('never drops below 1 step', () => {
+    expect(timing(1000, { invisibleTiming: 1 })).toBe(1);
+    expect(timing(801, { invisibleTiming: 2 })).toBe(1);
+  });
+  it('uses the setting list and stamps new bombs too', () => {
+    const s = { ...PRESETS.medium, invisibleTrigger: 1, invisibleHalves: [5], bombTrigger: 6, bombMax: 1, wallTrigger: 99, wallSpawnTrigger: 99, enemyTrigger: 99 };
+    expect(spawnForApple(W(), emptyHazards(), seeded(1), 6, s).bombs[0].fadeSteps).toBe(8);
+  });
+});
+
 describe('rules from the settings', () => {
   const W = () => ({ snake, direction: 'right', food: { x: 3, y: 3 } });
   const custom = (over) => ({ ...PRESETS.medium, ...over });
   const spawn = (h, rng, apples, s) => spawnForApple(W(), h, rng, apples, s);
 
   describe('ghost time setting', () => {
-    it('halves at apple 61 and again at 121, rounding to a whole step', () => {
-      expect(telegraphFor(60, 36)).toBe(36);
-      expect(telegraphFor(61, 36)).toBe(18);
-      expect(telegraphFor(121, 36)).toBe(9);
-      expect(telegraphFor(70, 25)).toBe(13);
-      expect(telegraphFor(130, 25)).toBe(6);
-      expect(telegraphFor(10, 0)).toBe(0);
-      expect(telegraphFor(200, 0)).toBe(0);
-      expect(telegraphFor(10)).toBe(24); // default is the medium base
+    it('halves the setting by its own half-trigger list, rounding up', () => {
+      const s = custom({ ghostTime: 25, ghostHalves: [10, 20] });
+      const stamp = (apples) => spawn(emptyHazards(), seeded(1), apples, { ...s, wallTrigger: apples }).walls[0].telegraph;
+      expect([10, 11, 21].map(stamp)).toEqual([25, 13, 7]);
+    });
+    it('does not halve with an empty list', () => {
+      const s = custom({ ghostHalves: [], wallTrigger: 500 });
+      expect(spawn(emptyHazards(), seeded(1), 500, s).walls[0].telegraph).toBe(24);
     });
     it('stamps new obstacles with the setting, and a 0 ghost time is solid at once', () => {
       const s = custom({ ghostTime: 0, wallTrigger: 5 });

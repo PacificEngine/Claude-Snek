@@ -3,6 +3,7 @@ import { createState, placeFood, queueDirection, tick, togglePause } from '../sr
 import { GRID_SIZE, START_LENGTH } from '../src/core/config.js';
 import { emptyHazards } from '../src/core/hazards.js';
 import { PRESETS } from '../src/core/difficulty.js';
+import { bpm } from '../src/core/pacing.js';
 
 const rng = () => 0;
 
@@ -179,8 +180,8 @@ describe('filling the board', () => {
     const head = path.at(-2);
     const snake = path.slice(0, -1).reverse();
     const direction = last.x > head.x ? 'right' : last.x < head.x ? 'left' : 'down';
-    const s = tick(stateWith({ snake, direction, food: last }), rng);
-    expect(s.snake).toHaveLength(GRID_SIZE * GRID_SIZE);
+    const s = tick(stateWith({ snake, direction, food: last, settings: { ...PRESETS.medium, maxLength: 1000 } }), rng);
+    expect(s.snake).toHaveLength(GRID_SIZE * GRID_SIZE); // a Medium snake would stop at its max of 200
     expect(s.status).toBe('gameOver');
     expect(s.food).toBeNull();
   });
@@ -385,6 +386,60 @@ describe('growth count', () => {
     s = eat(s);
     expect(s.growth.pending).toBe(6);
     expect(s.snake).toHaveLength(5);
+  });
+
+  describe('max snake size', () => {
+    const capped = (growth, maxLength) => ({ ...start(growth), settings: { ...settingsWith(growth), maxLength } });
+
+    it('never grows past the max when it starts at it, and drops pending and carry', () => {
+      let s = capped(4, 3);
+      for (let i = 0; i < 4; i++) s = eat(s);
+      s = steps({ ...s, food: null }, 5);
+      expect(s.snake).toHaveLength(3);
+      expect(s.growth).toEqual({ carry: 0, pending: 0 });
+    });
+
+    it('drops the carry of fractional growth at the max', () => {
+      const s = eat(capped(0.5, 3));
+      expect(s.snake).toHaveLength(3);
+      expect(s.growth).toEqual({ carry: 0, pending: 0 });
+    });
+
+    it('ends exactly at the max when growth would overshoot it', () => {
+      let s = eat(capped(4, 6));
+      s = steps({ ...s, food: null }, 10);
+      expect(s.snake).toHaveLength(6);
+      expect(s.growth.pending).toBe(0);
+    });
+
+    it('clamps the pending cells when eating again mid-growth', () => {
+      let s = eat(capped(4, 6)); // length 4, 2 pending
+      expect(s.growth.pending).toBe(2);
+      s = eat(s); // 4 more would make 10; room for 6 - 5 = 1
+      expect(s.snake).toHaveLength(5);
+      expect(s.growth.pending).toBe(1);
+    });
+
+    it('still scores one per apple at the max', () => {
+      let s = capped(1, 3);
+      for (let i = 0; i < 4; i++) s = eat(s);
+      expect(s.score).toBe(4);
+      expect(s.snake).toHaveLength(3);
+      expect(s.food).not.toBeNull();
+    });
+
+    it('leaves the tempo alone', () => {
+      const s = eat(capped(1, 3));
+      expect(bpm(s.score, s.settings)).toBe(bpm(s.score, PRESETS.medium));
+      expect(bpm(s.score, s.settings)).toBe(121);
+    });
+
+    it('treats a missing max as unlimited', () => {
+      const { maxLength, ...rest } = settingsWith(4);
+      let s = eat({ ...start(4), settings: rest });
+      s = steps({ ...s, food: null }, 5);
+      expect(s.snake).toHaveLength(7);
+    });
   });
 
   it('dies on the tail cell while still growing, but may follow it when not', () => {

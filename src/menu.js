@@ -1,12 +1,15 @@
-import { DIFFICULTIES, FIELDS, PRESETS, settingsFor, applyEdit, describeRange } from './core/difficulty.js';
+import { DIFFICULTIES, FIELDS, PRESETS, settingsFor, applyEdit, describeRange, formatList } from './core/difficulty.js';
 
 const LABELS = { easy: 'Easy', medium: 'Medium', hard: 'Hard', custom: 'Custom' };
 export const difficultyLabel = (difficulty) => LABELS[difficulty] ?? LABELS.medium;
 
 // Builds the dialog's fields with DOM APIs (no HTML strings) and wires its buttons.
+const copySettings = (settings) => Object.fromEntries(Object.entries(settings).map(([k, v]) => [k, Array.isArray(v) ? [...v] : v]));
+const show = (field, value) => (field.type === 'list' ? formatList(value) : String(value));
+
 export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn, cancelBtn, getCurrent, canOpen, onApply }) {
   let draftDifficulty = 'medium';
-  let draftCustom = { ...PRESETS.medium };
+  let draftCustom = copySettings(PRESETS.medium);
   const inputs = new Map();
 
   let group = null;
@@ -25,15 +28,20 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
     const name = document.createElement('span');
     name.textContent = `${field.label} (${describeRange(field)})`;
     const input = document.createElement('input');
-    input.type = 'number';
     input.id = `field-${field.key}`;
     input.setAttribute('aria-describedby', 'difficulty-note');
-    input.min = String(field.min);
-    input.max = String(field.max);
-    input.step = String(field.step);
+    if (field.type === 'list') {
+      input.type = 'text';
+      input.inputMode = 'numeric';
+    } else {
+      input.type = 'number';
+      input.min = String(field.min);
+      input.max = String(field.max);
+      input.step = String(field.step);
+    }
     input.addEventListener('change', () => {
       draftCustom = applyEdit(draftCustom, field, input.value);
-      input.value = String(draftCustom[field.key]);
+      input.value = show(field, draftCustom[field.key]);
     });
     label.append(name, input);
     groupEl.append(label);
@@ -45,7 +53,7 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
     const locked = draftDifficulty !== 'custom';
     FIELDS.forEach((field) => {
       const input = inputs.get(field.key);
-      input.value = String(values[field.key]);
+      input.value = show(field, values[field.key]);
       input.readOnly = locked;
       input.setAttribute('aria-readonly', String(locked));
       input.classList.toggle('locked', locked);
@@ -63,7 +71,7 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
     if (!canOpen()) return;
     const current = getCurrent();
     draftDifficulty = current.difficulty;
-    draftCustom = { ...current.custom };
+    draftCustom = copySettings(current.custom);
     select.value = draftDifficulty;
     refresh();
     dialog.showModal();

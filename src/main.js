@@ -32,7 +32,7 @@ const tierGate = createTierGate(() => musicTier(state.score));
 
 const conductor = createConductor({
   now: () => synth.now(),
-  getBpm: () => bpm(state.score, state.settings.speed),
+  getBpm: () => bpm(state.score, state.settings),
   onStep(step, time, dt) {
     synth.playStep(step, time, dt, tierGate.tierFor(step));
     const scheduledIn = epoch;

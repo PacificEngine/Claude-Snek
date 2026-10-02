@@ -1,31 +1,55 @@
 import { describe, it, expect } from 'vitest';
 import { bpm, musicTier, stepSeconds } from '../src/core/pacing.js';
+import { PRESETS } from '../src/core/difficulty.js';
 
-// the argument is now APPLES EATEN (the score)
+
+const curve = (initialBpm, finalBpm, bpmScale) => ({ initialBpm, finalBpm, bpmScale });
+
+// the first argument is APPLES EATEN (the score)
 describe('bpm', () => {
-  it('starts at 120', () => {
-    expect(bpm(0)).toBe(120);
+  it('Medium starts at 120, gains 1 per apple and stops at 200', () => {
+    const s = PRESETS.medium;
+    expect(bpm(0, s)).toBe(120);
+    expect(bpm(1, s)).toBe(121);
+    expect(bpm(79, s)).toBe(199);
+    expect(bpm(80, s)).toBe(200);
+    expect(bpm(500, s)).toBe(200);
   });
-  it('does not rise for the first three apples', () => {
-    expect(bpm(1)).toBe(120);
-    expect(bpm(3)).toBe(120);
+  it('Easy goes 72 to 120 and Hard 144 to 240', () => {
+    expect(bpm(0, PRESETS.easy)).toBe(72);
+    expect(bpm(80, PRESETS.easy)).toBe(120);
+    expect(bpm(500, PRESETS.easy)).toBe(120);
+    expect(bpm(0, PRESETS.hard)).toBe(144);
+    expect(bpm(80, PRESETS.hard)).toBe(240);
+    expect(bpm(500, PRESETS.hard)).toBe(240);
   });
-  it('rises 4 on every 4th apple', () => {
-    expect(bpm(4)).toBe(124);
-    expect(bpm(7)).toBe(124);
-    expect(bpm(8)).toBe(128);
+  it('descends and stops when the final BPM is below the initial BPM', () => {
+    const s = curve(200, 120, 2);
+    expect(bpm(0, s)).toBe(200);
+    expect(bpm(10, s)).toBe(180);
+    expect(bpm(40, s)).toBe(120);
+    expect(bpm(500, s)).toBe(120);
   });
-  it('reaches 200 exactly at the 80th apple and stays there', () => {
-    expect(bpm(79)).toBe(196);
-    expect(bpm(80)).toBe(200);
-    expect(bpm(500)).toBe(200);
+  it('is constant when initial and final are equal', () => {
+    expect(bpm(0, curve(100, 100, 5))).toBe(100);
+    expect(bpm(50, curve(100, 100, 5))).toBe(100);
   });
-  it('multiplies by the speed modifier after the 200 cap', () => {
-    expect(bpm(0, 0.6)).toBeCloseTo(72);
-    expect(bpm(0, 1.2)).toBeCloseTo(144);
-    expect(bpm(80, 1.2)).toBeCloseTo(240);
-    expect(bpm(500, 2)).toBeCloseTo(400);
-    expect(bpm(0, 0.1)).toBeCloseTo(12);
+  it('allows fractional scales without float noise', () => {
+    const s = curve(100, 200, 0.1);
+    expect(bpm(3, s)).toBe(100.3);
+    expect(bpm(7, s)).toBe(100.7);
+  });
+  it('handles the extremes 20 and 400', () => {
+    expect(bpm(0, curve(20, 400, 20))).toBe(20);
+    expect(bpm(1, curve(20, 400, 20))).toBe(40);
+    expect(bpm(100, curve(20, 400, 20))).toBe(400);
+    expect(bpm(100, curve(400, 20, 20))).toBe(20);
+  });
+  it('treats negative apples as zero', () => {
+    expect(bpm(-5, PRESETS.medium)).toBe(120);
+  });
+  it('defaults to the Medium settings', () => {
+    expect(bpm(10)).toBe(130);
   });
 });
 

@@ -16,9 +16,9 @@ const ENEMY_MOVE_EVERY = 2;
 
 const MEDIUM = PRESETS.medium;
 
-// Ghost time for an obstacle placed on this apple: the setting, halved after apple 60 and again after 120.
-export const telegraphFor = (apples, base = TELEGRAPH_STEPS) =>
-  apples > 120 ? Math.round(base / 4) : apples > 60 ? Math.round(base / 2) : base;
+// Halve `base` once for every entry of `halves` that is below `apples`; each halving rounds up.
+export const halveFor = (base, apples, halves = []) =>
+  halves.reduce((value, trigger) => (trigger < apples ? Math.ceil(value / 2) : value), base);
 
 // How many bombs there should be after this apple.
 export const bombCountFor = (apples, s = MEDIUM) =>
@@ -123,8 +123,9 @@ const spawnedWallCells = (h) =>
 // Hazards after an apple is eaten. `world.food` is the newly placed food; `apples` is the score
 // after eating; `s` is the active settings. Existing hazards are not aged here.
 export function spawnForApple(world, hazards, rng, apples, s = MEDIUM) {
-  const telegraph = telegraphFor(apples, s.ghostTime);
-  const fade = { fades: apples >= s.invisibleTrigger, fadeSteps: s.invisibleTiming };
+  const telegraph = halveFor(s.ghostTime, apples, s.ghostHalves);
+  const fadeSteps = Math.max(1, halveFor(s.invisibleTiming, apples, s.invisibleHalves));
+  const fade = { fades: apples >= s.invisibleTrigger, fadeSteps };
   let h = hazards;
   const at = () => ({ ...world, hazards: h });
   const addWall = (length, origin) => {

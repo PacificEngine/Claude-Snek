@@ -16,7 +16,7 @@ A single-player, browser-based Snake-style game. It's a personal learning projec
 - Food spawns on a random empty cell, never on the snake.
 - The game ends when the snake hits the arena edge, itself, or a solid hazard (walls, bomb, enemy snake; see `./hazards.md`).
 - A restart is available after game over.
-- Game speed and music tempo increase once for every 4 apples eaten (not on every apple): the base BPM rises 4 per 4 apples, from 120 to 200 at the 80th apple. The Game Speed Modifier of the active difficulty multiplies that BPM (Medium: 1.0).
+- Game speed and music tempo move with every apple eaten: the BPM goes from the difficulty's Initial BPM towards its Final BPM by BPM Scale per apple (Medium: 120 to 200, 1 per apple, reached at the 80th apple). See `./difficulty.md`.
 - The snake advances exactly one cell per sixteenth note of the music (rhythm-game feel): the music and the game share one beat clock, so every step lands on the beat grid.
 - Synthesized MIDI/chiptune-style background music plays during play: a 32-bar track (intro 4, verse 8, chorus 8, bridge 4, final chorus 8) in A minor with melody, a bass line, a synth kick on every quarter note and a synth hi-hat on every eighth note. Tempo rises with apples eaten (above), which also speeds up the game; the track keeps its place when the tempo changes.
 - The music grows more complex only as apples are eaten, in 10 tiers (one every 8 apples) that add layers on top of the 32-bar structure; the 80th apple reaches tier 10, a very complex loop with every layer playing:

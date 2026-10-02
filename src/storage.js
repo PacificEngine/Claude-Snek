@@ -1,4 +1,4 @@
-import { DEFAULT_DIFFICULTY, PRESETS, isDifficulty, sanitize } from './core/difficulty.js';
+import { DEFAULT_DIFFICULTY, isDifficulty, sanitize } from './core/difficulty.js';
 
 export const SCORED = ['easy', 'medium', 'hard'];
 const BEST_PREFIX = 'snake.highScore.';
@@ -56,15 +56,15 @@ export function saveDifficulty(difficulty, storage) {
 export function loadCustom(storage) {
   return guarded(() => {
     const raw = store(storage)?.getItem(CUSTOM_KEY);
-    if (!raw) return { ...PRESETS.medium };
+    if (!raw) return sanitize({});
     let parsed;
     try {
       parsed = JSON.parse(raw);
     } catch {
-      return { ...PRESETS.medium };
+      return sanitize({});
     }
     return sanitize(parsed);
-  }, { ...PRESETS.medium }, 'Could not read custom settings');
+  }, sanitize({}), 'Could not read custom settings');
 }
 
 export function saveCustom(custom, storage) {

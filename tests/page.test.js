@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { FIELDS } from '../src/core/difficulty.js';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const buttons = [...html.matchAll(/<button\b[^>]*>/g)].map((m) => m[0]);
@@ -82,6 +83,22 @@ describe('difficulty menu markup', () => {
     const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
     expect(menu).not.toMatch(/innerHTML|insertAdjacentHTML|eval\(/);
     expect(menu).toContain('createElement');
+  });
+  it('renders list fields as numeric-keyboard text inputs showing the formatted list', () => {
+    const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
+    expect(menu).toContain('formatList');
+    expect(menu).toContain("'numeric'");
+    expect(menu).toMatch(/inputMode|inputmode/);
+    expect(menu).not.toContain('.pattern');
+  });
+  it('groups the fields under the nine headings, each group contiguous in FIELDS order', () => {
+    const groups = FIELDS.map((f) => f.group);
+    const headings = groups.filter((g, i) => g !== groups[i - 1]);
+    expect(headings).toEqual(['Board', 'BPM', 'Growth', 'Ghost', 'Walls', 'Bombs', 'Spawning walls', 'Enemies', 'Effects']);
+  });
+  it('makes text inputs full width in the single-column layout', () => {
+    const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\.field input[^{]*\{[^}]*(width:\s*100%|box-sizing)/);
   });
   it('does not let the game keys fire while the dialog is open', () => {
     const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');

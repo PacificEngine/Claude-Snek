@@ -92,10 +92,12 @@ describe('chosen difficulty', () => {
 describe('custom settings', () => {
   it('round-trips and validates every field', () => {
     const s = fakeStorage();
-    saveCustom({ ...PRESETS.medium, gridSize: 33, speed: 1.7 }, s);
+    saveCustom({ ...PRESETS.medium, gridSize: 33, bpmScale: 1.7, ghostHalves: [30, 90, 90] }, s);
     const loaded = loadCustom(s);
     expect(loaded.gridSize).toBe(33);
-    expect(loaded.speed).toBe(1.7);
+    expect(loaded.bpmScale).toBe(1.7);
+    expect(loaded.ghostHalves).toEqual([30, 90, 90]);
+    expect(loaded.invisibleHalves).toEqual(PRESETS.medium.invisibleHalves);
     expect(loaded.growth).toBe(PRESETS.medium.growth);
   });
   it('stores the sanitized copy, not what it was given', () => {
@@ -104,17 +106,32 @@ describe('custom settings', () => {
     const stored = JSON.parse(s.data['snake.custom']);
     expect(stored.gridSize).toBe(50);
     expect(stored).not.toHaveProperty('junk');
-    expect(Object.keys(stored)).toHaveLength(23);
+    expect(Object.keys(stored)).toHaveLength(28);
   });
   it('replaces bad fields with medium defaults and ignores junk', () => {
-    const bad = fakeStorage({ 'snake.custom': JSON.stringify({ gridSize: 9999, speed: 'x', growth: 2 }) });
+    const bad = fakeStorage({ 'snake.custom': JSON.stringify({ gridSize: 9999, bpmScale: 'x', growth: 2 }) });
     const loaded = loadCustom(bad);
     expect(loaded.gridSize).toBe(50);
-    expect(loaded.speed).toBe(1);
+    expect(loaded.bpmScale).toBe(1);
     expect(loaded.growth).toBe(2);
     expect(loadCustom(fakeStorage({ 'snake.custom': 'not json' }))).toEqual(PRESETS.medium);
     expect(loadCustom(fakeStorage({ 'snake.custom': '[1,2]' }))).toEqual(PRESETS.medium);
     expect(loadCustom(fakeStorage())).toEqual(PRESETS.medium);
+  });
+  it('migrates an old save with speed and no new keys, filling from medium', () => {
+    const old = fakeStorage({ 'snake.custom': JSON.stringify({ gridSize: 25, speed: 1.5, growth: 3, ghostTime: 10 }) });
+    const loaded = loadCustom(old);
+    expect(loaded).not.toHaveProperty('speed');
+    expect(loaded).toMatchObject({ gridSize: 25, growth: 3, ghostTime: 10 });
+    expect(loaded).toMatchObject({
+      initialBpm: 120, finalBpm: 200, bpmScale: 1, maxLength: 200,
+      ghostHalves: [60, 120, 180, 240], invisibleHalves: [200, 400, 600, 800],
+    });
+  });
+  it('does not share the preset arrays with what it loads', () => {
+    const loaded = loadCustom(fakeStorage());
+    expect(loaded.ghostHalves).not.toBe(PRESETS.medium.ghostHalves);
+    expect(Object.isFrozen(loaded.ghostHalves)).toBe(false);
   });
   it('survives broken storage', () => {
     const spy = quiet();
