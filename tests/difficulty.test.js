@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TRACK_IDS } from '../src/core/track.js';
 import {
-  DIFFICULTIES, FIELDS, MUSIC_FIELDS, DEFAULT_MUSIC, sanitizeMusic, withMusic, musicForGame, trackForGame, randomMusic, PRESETS, clampField, sanitize, settingsFor, applyEdit,
+  DIFFICULTIES, FIELDS, MUSIC_FIELDS, DEFAULT_MUSIC, sanitizeMusic, sanitizeAllMusic, DEFAULT_ALL_MUSIC, trackSelectState, musicOf, withMusic, musicForGame, trackForGame, randomMusic, PRESETS, clampField, sanitize, settingsFor, applyEdit,
   describeRange, formatList, isDifficulty, DEFAULT_DIFFICULTY, randomSettings, constrain,
 } from '../src/core/difficulty.js';
 
@@ -434,5 +434,68 @@ describe('trackForGame', () => {
   });
   it('treats an unknown selected id as Classic', () => {
     expect(trackForGame('nope', false, Math.random)).toBe('classic');
+  });
+});
+
+describe('per-track music', () => {
+  const OLD = {
+    kickTrigger: 1, bassTrigger: 2, hatTrigger: 3, melodyTrigger: 4, snareTrigger: 5, fastHatTrigger: 6,
+    arpTrigger: 7, bassPulseTrigger: 8, harmonyTrigger: 9, counterTrigger: 10, fillTrigger: 11,
+  };
+  const SLOTS = { t0: 1, t1: 2, t2: 3, t3: 4, t4: 5, t5: 6, t6: 7, t7: 8, t8: 9, t9: 10, t10: 11 };
+  it('defaults every registered track to the default triggers, frozen', () => {
+    expect(Object.keys(DEFAULT_ALL_MUSIC)).toEqual(TRACK_IDS);
+    TRACK_IDS.forEach((id) => expect(DEFAULT_ALL_MUSIC[id]).toEqual(DEFAULT_MUSIC));
+    expect(Object.isFrozen(DEFAULT_ALL_MUSIC)).toBe(true);
+    TRACK_IDS.forEach((id) => expect(Object.isFrozen(DEFAULT_ALL_MUSIC[id])).toBe(true));
+  });
+  it('keeps each track\'s own values, independent of the others', () => {
+    const all = sanitizeAllMusic({ midnight: { t4: 5 }, sunrise: { t4: 9, t10: 77 } });
+    expect(all.midnight).toEqual({ ...DEFAULT_MUSIC, t4: 5 });
+    expect(all.sunrise).toEqual({ ...DEFAULT_MUSIC, t4: 9, t10: 77 });
+    expect(all.classic).toEqual(DEFAULT_MUSIC);
+  });
+  it('defaults missing or corrupt tracks and ignores unknown ids', () => {
+    const all = sanitizeAllMusic({ classic: 'junk', sunrise: [1, 2], midnight: { t2: 'x', t10: 5000 }, bogus: { t4: 1 } });
+    expect(Object.keys(all)).toEqual(TRACK_IDS);
+    expect(all.classic).toEqual(DEFAULT_MUSIC);
+    expect(all.sunrise).toEqual(DEFAULT_MUSIC);
+    expect(all.midnight).toEqual({ ...DEFAULT_MUSIC, t10: 1000 });
+    expect(all).not.toHaveProperty('bogus');
+  });
+  it('gives defaults for anything that is not an object', () => {
+    for (const bad of [null, undefined, 'x', 7, [1, 2]]) expect(sanitizeAllMusic(bad)).toEqual(DEFAULT_ALL_MUSIC);
+  });
+  it('copies a flat set (slot keys) to every track', () => {
+    const all = sanitizeAllMusic(SLOTS);
+    TRACK_IDS.forEach((id) => expect(all[id]).toEqual(SLOTS));
+  });
+  it('copies a legacy instrument-named set to every track, in the old order', () => {
+    const all = sanitizeAllMusic(OLD);
+    TRACK_IDS.forEach((id) => expect(all[id]).toEqual(SLOTS));
+  });
+  it('prefers a slot key over its legacy name, and validates a flat set', () => {
+    expect(sanitizeAllMusic({ kickTrigger: 9, t0: 3, t10: 5000 }).classic).toMatchObject({ t0: 3, t10: 1000 });
+  });
+  it('copies a flat set without sharing objects between tracks', () => {
+    const all = sanitizeAllMusic(SLOTS);
+    expect(all.classic).not.toBe(all.sunrise);
+    expect(Object.isFrozen(all.classic)).toBe(false);
+  });
+  it('musicOf picks one track\'s triggers, Classic for an unknown id', () => {
+    const all = sanitizeAllMusic({ midnight: { t4: 5 } });
+    expect(musicOf(all, 'midnight').t4).toBe(5);
+    expect(musicOf(all, 'sunrise').t4).toBe(DEFAULT_MUSIC.t4);
+    expect(musicOf(all, 'nope')).toEqual(all.classic);
+    expect(musicOf(undefined, 'midnight')).toEqual(DEFAULT_MUSIC);
+  });
+});
+
+describe('trackSelectState', () => {
+  it('shows the saved pick, enabled, when tracks are not randomized', () => {
+    expect(trackSelectState({ trackRandom: false, track: 'sunrise', gameTrack: 'midnight' })).toEqual({ value: 'sunrise', disabled: false });
+  });
+  it('shows the track the game uses, disabled, while tracks are randomized', () => {
+    expect(trackSelectState({ trackRandom: true, track: 'sunrise', gameTrack: 'midnight' })).toEqual({ value: 'midnight', disabled: true });
   });
 });

@@ -1,5 +1,5 @@
-import { SLOT_KEYS, TRACK_IDS, DEFAULT_TRACK } from './core/track.js';
-import { DEFAULT_DIFFICULTY, isDifficulty, sanitize, sanitizeMusic } from './core/difficulty.js';
+import { TRACK_IDS, DEFAULT_TRACK } from './core/track.js';
+import { DEFAULT_DIFFICULTY, isDifficulty, sanitize, sanitizeAllMusic } from './core/difficulty.js';
 
 export const SCORED = ['easy', 'medium', 'hard', 'frantic'];
 const BEST_PREFIX = 'snake.highScore.';
@@ -76,28 +76,21 @@ export function saveCustom(custom, storage) {
   guarded(() => store(storage)?.setItem(CUSTOM_KEY, JSON.stringify(sanitize(custom))), undefined, 'Could not save custom settings');
 }
 
-// Music saved before the triggers belonged to slots used instrument-named keys; they map onto the slots in the old order.
-const OLD_MUSIC_KEYS = ['kickTrigger', 'bassTrigger', 'hatTrigger', 'melodyTrigger', 'snareTrigger', 'fastHatTrigger', 'arpTrigger', 'bassPulseTrigger', 'harmonyTrigger', 'counterTrigger', 'fillTrigger'];
-function withSlotKeys(saved) {
-  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return saved;
-  const converted = Object.fromEntries(OLD_MUSIC_KEYS.filter((old) => old in saved).map((old) => [SLOT_KEYS[OLD_MUSIC_KEYS.indexOf(old)], saved[old]]));
-  return { ...converted, ...saved };
-}
-
+// Every track's own triggers. Older saves (one flat set, slot- or instrument-named) are copied to every track by sanitizeAllMusic.
 export function loadMusic(storage) {
   return guarded(() => {
     const raw = store(storage)?.getItem(MUSIC_KEY);
-    if (!raw) return sanitizeMusic({});
+    if (!raw) return sanitizeAllMusic({});
     try {
-      return sanitizeMusic(withSlotKeys(JSON.parse(raw)));
+      return sanitizeAllMusic(JSON.parse(raw));
     } catch {
-      return sanitizeMusic({});
+      return sanitizeAllMusic({});
     }
-  }, sanitizeMusic({}), 'Could not read music settings');
+  }, sanitizeAllMusic({}), 'Could not read music settings');
 }
 
 export function saveMusic(music, storage) {
-  guarded(() => store(storage)?.setItem(MUSIC_KEY, JSON.stringify(sanitizeMusic(music))), undefined, 'Could not save music settings');
+  guarded(() => store(storage)?.setItem(MUSIC_KEY, JSON.stringify(sanitizeAllMusic(music))), undefined, 'Could not save music settings');
 }
 
 // The "Randomize every game" toggle: stored as 'true' or 'false'; anything else means off.

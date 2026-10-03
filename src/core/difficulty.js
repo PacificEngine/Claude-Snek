@@ -137,6 +137,29 @@ export function sanitizeMusic(input) {
   return Object.fromEntries(MUSIC_FIELDS.map((fld) => [fld.key, clampField(fld, source[fld.key]) ?? DEFAULT_MUSIC[fld.key]]));
 }
 
+const LEGACY_MUSIC_KEYS = ['kickTrigger', 'bassTrigger', 'hatTrigger', 'melodyTrigger', 'snareTrigger', 'fastHatTrigger', 'arpTrigger', 'bassPulseTrigger', 'harmonyTrigger', 'counterTrigger', 'fillTrigger'];
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+// Triggers saved before they were per track form one flat set, keyed by slot (t0..t10) or, older still, by instrument name.
+const isFlatMusic = (input) => [...SLOT_KEYS, ...LEGACY_MUSIC_KEYS].some((key) => key in input);
+const fromLegacyKeys = (flat) => ({
+  ...Object.fromEntries(LEGACY_MUSIC_KEYS.filter((old) => old in flat).map((old) => [SLOT_KEYS[LEGACY_MUSIC_KEYS.indexOf(old)], flat[old]])),
+  ...flat,
+});
+
+// Every track's own triggers: { [trackId]: {t0..t10} }. Missing or corrupt tracks take the defaults, unknown ids are dropped,
+// and an old flat set (one shared set of triggers) is copied to every track.
+export function sanitizeAllMusic(input) {
+  const source = isPlainObject(input) ? input : {};
+  const flat = isFlatMusic(source) ? sanitizeMusic(fromLegacyKeys(source)) : null;
+  return Object.fromEntries(TRACK_IDS.map((id) => [id, flat ? { ...flat } : sanitizeMusic(source[id])]));
+}
+
+const deepFreezeMusic = (all) => Object.freeze(Object.fromEntries(Object.entries(all).map(([id, music]) => [id, Object.freeze(music)])));
+export const DEFAULT_ALL_MUSIC = deepFreezeMusic(sanitizeAllMusic({}));
+
+// One track's triggers out of the all-tracks map (Classic's for an unknown id).
+export const musicOf = (all, trackId) => all?.[TRACK_IDS.includes(trackId) ? trackId : DEFAULT_TRACK] ?? DEFAULT_MUSIC;
+
 // The full settings the engine reads: the difficulty's settings plus the global music triggers.
 export const withMusic = (settings, music) => ({ ...settings, ...music });
 
@@ -195,6 +218,10 @@ export const musicForGame = (saved, randomizeOn, rng) => (randomizeOn ? randomMu
 // registered tracks. An unknown id plays Classic. The saved pick is never touched.
 export const trackForGame = (selectedId, randomOn, rng) =>
   randomOn ? TRACK_IDS[Math.min(TRACK_IDS.length - 1, Math.floor(rng() * TRACK_IDS.length))] : (TRACK_IDS.includes(selectedId) ? selectedId : DEFAULT_TRACK);
+
+// What the header soundtrack selector shows: the player's pick, or (while "Randomize Track Every Game" is on) the track the
+// current game uses, locked.
+export const trackSelectState = ({ trackRandom, track, gameTrack }) => ({ value: trackRandom ? gameTrack : track, disabled: trackRandom });
 
 // Settings for a difficulty. Stays pure: Random needs the caller's injected `rng` (main.js passes Math.random);
 // without one it falls back to Medium rather than rolling from a hidden source.
