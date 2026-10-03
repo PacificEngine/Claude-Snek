@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { eventsAt as eventsFor, layersForTier, LAYERS, TOTAL_STEPS, STEPS_PER_BAR } from '../src/core/track.js';
+import { eventsAt as eventsFor, layersForTier, SLOT_KEYS, TOTAL_STEPS, STEPS_PER_BAR } from '../src/core/track.js';
 
 // The tier-based assertions below call eventsAt(step, tier); a tier switches on the layers up to it.
 const eventsAt = (step, tier) => eventsFor(step, layersForTier(tier));
-const only = (...names) => Object.fromEntries(LAYERS.map((n) => [n, names.includes(n)]));
+// Layer sets are named by the Classic instrument and keyed by slot, as the game does.
+const INSTRUMENTS = ['kick', 'bass', 'hat', 'melody', 'snare', 'sixteenthHat', 'arp', 'bassPulse', 'harmony', 'counter', 'fill'];
+const only = (...names) => Object.fromEntries(SLOT_KEYS.map((k, i) => [k, names.includes(INSTRUMENTS[i])]));
 
 const stepsAt = (tier) => Array.from({ length: TOTAL_STEPS }, (_, i) => eventsAt(i, tier));
 const melodyFrom = (tier, start, count) =>
@@ -168,13 +170,13 @@ describe('layers only accumulate', () => {
       lower.forEach((e, i) => expect(layers(higher[i])).toBeGreaterThanOrEqual(layers(e)));
     }
   });
-  it('lists the layers in the order they enter by default', () => {
-    expect(LAYERS).toEqual(['kick', 'bass', 'hat', 'melody', 'snare', 'sixteenthHat', 'arp', 'bassPulse', 'harmony', 'counter', 'fill']);
+  it('has eleven slots t0..t10 in the order the layers enter by default', () => {
+    expect(SLOT_KEYS).toEqual(['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7', 't8', 't9', 't10']);
   });
   it('switches on the first n layers after kick and bass for tier n, kick and bass always on', () => {
     expect(layersForTier(0)).toEqual(only('kick', 'bass'));
     expect(layersForTier(2)).toEqual(only('kick', 'bass', 'hat', 'melody'));
-    expect(layersForTier(10)).toEqual(only(...LAYERS));
+    expect(layersForTier(10)).toEqual(only(...INSTRUMENTS));
   });
 });
 

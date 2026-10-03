@@ -1,8 +1,8 @@
 import { createState, queueDirection, tick, togglePause } from './core/game.js';
 import { bpm, activeLayers, placementBudgetMs } from './core/pacing.js';
 import { createLayerGate } from './core/layer-gate.js';
-import { loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, loadMusicRandom, saveMusicRandom, SCORED } from './storage.js';
-import { settingsFor, settingsWithMusic, musicForGame } from './core/difficulty.js';
+import { loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, loadMusicRandom, saveMusicRandom, loadTrack, saveTrack, loadTrackRandom, saveTrackRandom, SCORED } from './storage.js';
+import { settingsFor, withMusic, musicForGame, trackForGame } from './core/difficulty.js';
 import { createMenu, difficultyLabel } from './menu.js';
 import { actionForKey, actionForButton } from './input.js';
 import { createSynth } from './synth.js';
@@ -23,10 +23,14 @@ let difficulty = loadDifficulty();
 let custom = loadCustom();
 let music = loadMusic();
 let musicRandom = loadMusicRandom();
-// The settings for the next run: the difficulty's (Random re-rolls here) plus the global music triggers (a Random roll brings its own).
-// "Randomize every game" swaps in a fresh music roll for that game only; `music` (the player's own) is never replaced by it.
-const nextSettings = (gameMusic = musicForGame(difficulty, music, musicRandom, Math.random)) =>
-  settingsWithMusic(difficulty, settingsFor(difficulty, custom, Math.random), gameMusic);
+// The soundtrack: the player's pick, or (with "Randomize Track Every Game") a fresh draw per game that never replaces the pick.
+let track = loadTrack();
+let trackRandom = loadTrackRandom();
+let gameTrack = trackForGame(track, trackRandom, Math.random);
+// The settings for the next run: the difficulty's (Random re-rolls here, but never the music) plus the global music triggers.
+// "Randomize Triggers Every Game" swaps in a fresh music roll for that game only; `music` (the player's own) is never replaced by it.
+const nextSettings = (gameMusic = musicForGame(music, musicRandom, Math.random), base = settingsFor(difficulty, custom, Math.random)) =>
+  withMusic(base, gameMusic);
 let settings = nextSettings();
 let best = loadBest(difficulty);
 let state = createState(Math.random, settings);
@@ -40,7 +44,7 @@ const conductor = createConductor({
   now: () => synth.now(),
   getBpm: () => bpm(state.score, state.settings),
   onStep(step, time, dt) {
-    synth.playStep(step, time, dt, layerGate.layersFor(step));
+    synth.playStep(step, time, dt, layerGate.layersFor(step), gameTrack);
     const scheduledIn = epoch;
     setTimeout(() => {
       if (scheduledIn === epoch) advance();
@@ -88,6 +92,7 @@ function advance() {
     stopBeat();
     // Random re-rolls for the next run now, so the menu shows what the next run will use.
     settings = nextSettings();
+    gameTrack = trackForGame(track, trackRandom, Math.random);
   }
   draw();
 }
@@ -99,17 +104,23 @@ function restart() {
 }
 
 // `roll` is the Random roll the dialog previewed, so what was shown is what runs.
-function applyDifficulty(nextDifficulty, nextCustom, roll, nextMusic, nextMusicRandom, musicRoll) {
+// `nextTrackRoll` is the track the dialog previewed for the next game (used as is, like the music roll).
+function applyDifficulty(nextDifficulty, nextCustom, roll, nextMusic, nextMusicRandom, musicRoll, nextTrack = track, nextTrackRandom = trackRandom, nextTrackRoll) {
   stopBeat();
   difficulty = nextDifficulty;
   custom = nextCustom;
   music = nextMusic;
   musicRandom = nextMusicRandom;
-  settings = difficulty === 'random' && roll ? settingsWithMusic('random', roll, music) : nextSettings(musicRandom ? musicRoll : undefined);
+  track = nextTrack;
+  trackRandom = nextTrackRandom;
+  gameTrack = nextTrackRoll ?? trackForGame(track, trackRandom, Math.random);
+  settings = nextSettings(musicRandom ? musicRoll : undefined, difficulty === 'random' ? roll : undefined);
   saveDifficulty(difficulty);
   saveCustom(custom);
   saveMusic(music);
   saveMusicRandom(musicRandom);
+  saveTrack(track);
+  saveTrackRandom(trackRandom);
   best = loadBest(difficulty);
   state = createState(Math.random, settings);
   started = false;
@@ -124,7 +135,7 @@ createMenu({
   openBtn: difficultyBtn,
   applyBtn: document.getElementById('difficulty-apply'),
   cancelBtn: document.getElementById('difficulty-cancel'),
-  getCurrent: () => ({ difficulty, custom, music, musicRandom, settings }),
+  getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings }),
   rng: Math.random,
   canOpen: () => !runInProgress(),
   onApply: applyDifficulty,

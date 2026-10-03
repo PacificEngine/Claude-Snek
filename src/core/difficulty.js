@@ -1,3 +1,5 @@
+import { SLOT_KEYS, TRACK_IDS, DEFAULT_TRACK } from './track.js';
+
 export const DIFFICULTIES = ['easy', 'medium', 'hard', 'frantic', 'random', 'custom'];
 export const DEFAULT_DIFFICULTY = 'medium';
 export const isDifficulty = (value) => DIFFICULTIES.includes(value);
@@ -37,26 +39,12 @@ export const FIELDS = [
 ];
 
 // The eleven music triggers are a global setting set: not per difficulty, always editable, stored on their own.
-export const MUSIC_FIELDS = [
-  f('kickTrigger', 'Kick Trigger', 'Music', 0, 1000),
-  f('bassTrigger', 'Bass Trigger', 'Music', 0, 1000),
-  f('hatTrigger', 'Hi-Hat Trigger', 'Music', 0, 1000),
-  f('melodyTrigger', 'Melody Trigger', 'Music', 0, 1000),
-  f('snareTrigger', 'Snare Trigger', 'Music', 0, 1000),
-  f('fastHatTrigger', 'Fast Hi-Hat Trigger', 'Music', 0, 1000),
-  f('arpTrigger', 'Arpeggio Trigger', 'Music', 0, 1000),
-  f('bassPulseTrigger', 'Bass Pulse Trigger', 'Music', 0, 1000),
-  f('harmonyTrigger', 'Harmony Trigger', 'Music', 0, 1000),
-  f('counterTrigger', 'Counter-Melody Trigger', 'Music', 0, 1000),
-  f('fillTrigger', 'Drum Fill Trigger', 'Music', 0, 1000),
-];
+// Slot keys, not instrument names: the tracks give each slot its instrument (see core/track.js), the values stay with the slot.
+export const MUSIC_FIELDS = SLOT_KEYS.map((key, i) => f(key, `Layer ${i + 1}`, 'Music', 0, 1000));
 
 const GHOST_HALVES = Object.freeze([60, 120, 180, 240]);
 const INVISIBLE_HALVES = Object.freeze([200, 400, 600, 800]);
-export const DEFAULT_MUSIC = Object.freeze({
-  kickTrigger: 0, bassTrigger: 0, hatTrigger: 8, melodyTrigger: 16, snareTrigger: 24, fastHatTrigger: 32, arpTrigger: 40,
-  bassPulseTrigger: 48, harmonyTrigger: 56, counterTrigger: 64, fillTrigger: 72,
-});
+export const DEFAULT_MUSIC = Object.freeze(Object.fromEntries(SLOT_KEYS.map((key, i) => [key, i < 2 ? 0 : (i - 1) * 8])));
 
 export const PRESETS = Object.freeze({
   easy: Object.freeze({
@@ -185,17 +173,17 @@ export function randomSettings(rng) {
     const [min, max] = field.key.endsWith('Bpm') ? BPM_RANGE : [field.min, randomCap(field, cells)];
     settings[field.key] = pick(rng, min, max, field.step);
   });
-  // The roll carries its own music triggers; they are for that game only and never replace the player's.
-  return { ...settings, ...randomMusic(rng) };
+  return settings;
 }
 
-// What the engine runs: the player's global music with every difficulty, but a Random roll keeps its own.
-export const settingsWithMusic = (difficulty, settings, music) => (difficulty === 'random' ? { ...music, ...settings } : withMusic(settings, music));
+// The music one game uses: the player's saved music, or (when "Randomize Triggers Every Game" is on) a fresh ramp roll.
+// The saved object is never touched.
+export const musicForGame = (saved, randomizeOn, rng) => (randomizeOn ? randomMusic(rng) : { ...saved });
 
-// The music one game uses: the player's saved music, or (when "Randomize every game" is on) a fresh ramp roll.
-// Random already rolls its own music, so the toggle adds nothing there. The saved object is never touched.
-export const musicForGame = (difficulty, saved, randomizeOn, rng) =>
-  (randomizeOn && difficulty !== 'random' ? randomMusic(rng) : { ...saved });
+// The track one game uses: the player's pick, or (when "Randomize Track Every Game" is on) a uniform draw from the
+// registered tracks. An unknown id plays Classic. The saved pick is never touched.
+export const trackForGame = (selectedId, randomOn, rng) =>
+  randomOn ? TRACK_IDS[Math.min(TRACK_IDS.length - 1, Math.floor(rng() * TRACK_IDS.length))] : (TRACK_IDS.includes(selectedId) ? selectedId : DEFAULT_TRACK);
 
 // Settings for a difficulty. Stays pure: Random needs the caller's injected `rng` (main.js passes Math.random);
 // without one it falls back to Medium rather than rolling from a hidden source.

@@ -1,11 +1,9 @@
 import { eventsAt } from './core/track.js';
 
 const MASTER_VOLUME = 0.2;
-const LEVEL = {
-  melody: 0.3, harmony: 0.16, counter: 0.1, arp: 0.07,
-  bass: 0.55, kick: 0.9, snare: 0.35, hat: 0.12,
-};
 const SILENT_FLOOR = 0.0001;
+const PULSE_DUTY = 0.25;
+const PULSE_HARMONICS = 32;
 
 const midiToHz = (m) => 440 * 2 ** ((m - 69) / 12);
 
@@ -38,42 +36,65 @@ export function createSynth(
     osc.stop(time + duration + 0.02);
   }
 
-  function kick(time) {
+  // A burst of filtered noise: the building block of snare, hat, clap and shaker.
+  function burst(filterType, frequency, time, duration, level) {
+    const src = ctx.createBufferSource();
+    src.buffer = noise;
+    const filter = ctx.createBiquadFilter();
+    filter.type = filterType;
+    filter.frequency.value = frequency;
+    src.connect(filter);
+    filter.connect(envelope(time, level, duration));
+    src.start(time);
+    src.stop(time + duration + 0.01);
+  }
+
+  // A sine that falls from `from` to `to` Hz: the body of kick and tom.
+  function thump(from, to, sweep, decay, time, level) {
     const osc = ctx.createOscillator();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(150, time);
-    osc.frequency.exponentialRampToValueAtTime(45, time + 0.12);
+    osc.frequency.setValueAtTime(from, time);
+    osc.frequency.exponentialRampToValueAtTime(to, time + sweep);
     const g = ctx.createGain();
-    g.gain.setValueAtTime(LEVEL.kick, time);
-    g.gain.exponentialRampToValueAtTime(SILENT_FLOOR, time + 0.15);
+    g.gain.setValueAtTime(level, time);
+    g.gain.exponentialRampToValueAtTime(SILENT_FLOOR, time + decay);
     osc.connect(g);
     g.connect(bus);
     osc.start(time);
-    osc.stop(time + 0.17);
+    osc.stop(time + decay + 0.02);
   }
 
-  function hat(time) {
-    const src = ctx.createBufferSource();
-    src.buffer = noise;
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'highpass';
-    filter.frequency.value = 7000;
-    src.connect(filter);
-    filter.connect(envelope(time, LEVEL.hat, 0.04));
-    src.start(time);
-    src.stop(time + 0.05);
+  // A narrow rectangle wave built once from its harmonics; plain square if the browser has no periodic waves.
+  let pulseWave = null;
+  function pulse(midi, time, duration, level) {
+    if (!ctx.createPeriodicWave) return tone('square', midi, time, duration, level);
+    if (!pulseWave) {
+      const real = new Float32Array(PULSE_HARMONICS + 1);
+      for (let n = 1; n <= PULSE_HARMONICS; n++) real[n] = (2 * Math.sin(n * Math.PI * PULSE_DUTY)) / (n * Math.PI);
+      pulseWave = ctx.createPeriodicWave(real, new Float32Array(PULSE_HARMONICS + 1));
+    }
+    const osc = ctx.createOscillator();
+    osc.setPeriodicWave(pulseWave);
+    osc.frequency.value = midiToHz(midi);
+    osc.connect(envelope(time, level, duration));
+    osc.start(time);
+    osc.stop(time + duration + 0.02);
   }
 
-  function snare(time) {
-    const src = ctx.createBufferSource();
-    src.buffer = noise;
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'highpass';
-    filter.frequency.value = 1500;
-    src.connect(filter);
-    filter.connect(envelope(time, LEVEL.snare, 0.12));
-    src.start(time);
-    src.stop(time + 0.14);
+  const OSCILLATOR_TYPE = { square: 'square', triangle: 'triangle', saw: 'sawtooth', sine: 'sine' };
+
+  // The one way anything is played: a voice, a MIDI note (null for drums), when, how long (seconds) and how loud.
+  function playHit(voice, note, time, length, level) {
+    if (!ctx) return;
+    if (voice === 'kick') thump(150, 45, 0.12, 0.15, time, level);
+    else if (voice === 'tom') thump(midiToHz(note ?? 50) * 1.6, midiToHz(note ?? 50), 0.08, 0.22, time, level);
+    else if (voice === 'snare') burst('highpass', 1500, time, 0.12, level);
+    else if (voice === 'hat') burst('highpass', 7000, time, 0.04, level);
+    else if (voice === 'shaker') burst('bandpass', 6000, time, 0.06, level);
+    else if (voice === 'clap') [0, 0.012, 0.024].forEach((d) => burst('bandpass', 1500, time + d, d === 0.024 ? 0.1 : 0.02, level));
+    else if (note === null || note === undefined) return;
+    else if (voice === 'pulse') pulse(note, time, length, level);
+    else if (OSCILLATOR_TYPE[voice]) tone(OSCILLATOR_TYPE[voice], note, time, length, level);
   }
 
   function makeNoise() {
@@ -109,20 +130,10 @@ export function createSynth(
       }
     },
     now: () => (ctx ? ctx.currentTime : performance.now() / 1000),
-    playStep(step, time, dt, active) {
+    playHit,
+    playStep(step, time, dt, active, trackId) {
       if (!ctx) return;
-      const e = eventsAt(step, active);
-      if (e.kick) kick(time);
-      if (e.snare) snare(time);
-      if (e.hat) hat(time);
-      if (e.bass !== null) {
-        const bassLength = active.bassPulse ? dt * 1.8 : dt * 3.6;
-        tone('triangle', e.bass, time, bassLength, LEVEL.bass);
-      }
-      if (e.arp !== null) tone('square', e.arp, time, dt * 0.9, LEVEL.arp);
-      if (e.melody !== null) tone('square', e.melody, time, dt * 1.8, LEVEL.melody);
-      if (e.harmony !== null) tone('square', e.harmony, time, dt * 1.8, LEVEL.harmony);
-      if (e.counter !== null) tone('sawtooth', e.counter, time, dt * 1.8, LEVEL.counter);
+      eventsAt(step, active, trackId).hits.forEach((h) => playHit(h.voice, h.note, time, h.length * dt, h.level));
     },
     // Some mobile browsers only unlock audio on a later gesture event; try again.
     unlock() {

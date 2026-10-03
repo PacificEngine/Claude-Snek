@@ -16,36 +16,13 @@ const triggers = FIELDS.filter((f) => f.key.endsWith('Trigger'));
 const HALF_CAPS = [200, 400, 600, 800];
 
 describe('randomSettings', () => {
-  it('returns all 28 fields plus the 11 music triggers, each valid (sanitize leaves the fields unchanged)', () => {
+  it('returns exactly the 28 difficulty fields and no music triggers, each valid (sanitize leaves them unchanged)', () => {
     rolls.forEach((r) => {
-      expect(Object.keys(r).sort()).toEqual([...FIELDS, ...MUSIC_FIELDS].map((f) => f.key).sort());
+      expect(Object.keys(r).sort()).toEqual(FIELDS.map((f) => f.key).sort());
       expect(FIELDS).toHaveLength(28);
-      expect(MUSIC_FIELDS).toHaveLength(11);
-      expect(sanitize(r)).toEqual(Object.fromEntries(FIELDS.map((f) => [f.key, r[f.key]])));
+      MUSIC_FIELDS.forEach((f) => expect(r).not.toHaveProperty(f.key));
+      expect(sanitize(r)).toEqual(r);
     });
-  });
-  it('rolls the music triggers as whole numbers from 0 to 100 forming a ramp: sorted, v[0] = 0 and v[k] <= 10k', () => {
-    rolls.forEach((r) => {
-      const values = MUSIC_FIELDS.map((f) => r[f.key]);
-      expect(values).toHaveLength(11);
-      values.forEach((v) => { expect(Number.isInteger(v)).toBe(true); expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(100); });
-      const sorted = [...values].sort((x, y) => x - y);
-      expect(sorted[0]).toBe(0);
-      sorted.forEach((v, k) => expect(v).toBeLessThanOrEqual(10 * k));
-    });
-  });
-  it('reaches the ramp extremes: all 0 and the 0, 10, ... 100 staircase', () => {
-    expect(MUSIC_FIELDS.map((f) => randomSettings(() => 0)[f.key])).toEqual(Array(11).fill(0));
-    const top = MUSIC_FIELDS.map((f) => randomSettings(() => 0.999999)[f.key]);
-    expect([...top].sort((x, y) => x - y)).toEqual([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
-  });
-  it('lets every instrument be early or late', () => {
-    MUSIC_FIELDS.forEach((f) => {
-      const seen = rolls.map((r) => r[f.key]);
-      expect(Math.min(...seen)).toBeLessThanOrEqual(10);
-      expect(Math.max(...seen)).toBeGreaterThanOrEqual(60);
-    });
-    expect(new Set(rolls.map((r) => r.kickTrigger)).size).toBeGreaterThan(20);
   });
   it('rolls Initial and Final BPM as whole numbers from 60 to 260', () => {
     rolls.forEach((r) => ['initialBpm', 'finalBpm'].forEach((key) => {
@@ -158,12 +135,7 @@ describe('randomMusic', () => {
   });
   it('is deterministic for a seed and shuffles which instrument is early', () => {
     expect(randomMusic(seeded(5))).toEqual(randomMusic(seeded(5)));
-    expect(new Set(musics.map((m) => m.snareTrigger)).size).toBeGreaterThan(20);
+    expect(new Set(musics.map((m) => m.t4)).size).toBeGreaterThan(20);
     expect(new Set(musics.map((m) => JSON.stringify(m))).size).toBeGreaterThan(250);
-  });
-  it('is the music part of a Random roll', () => {
-    const roll = randomSettings(seeded(9));
-    MUSIC_FIELDS.forEach((f) => expect(roll[f.key]).toBeGreaterThanOrEqual(0));
-    expect(Object.keys(randomMusic(() => 0.5))).toHaveLength(11);
   });
 });

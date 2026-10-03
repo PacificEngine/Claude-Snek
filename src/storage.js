@@ -1,3 +1,4 @@
+import { SLOT_KEYS, TRACK_IDS, DEFAULT_TRACK } from './core/track.js';
 import { DEFAULT_DIFFICULTY, isDifficulty, sanitize, sanitizeMusic } from './core/difficulty.js';
 
 export const SCORED = ['easy', 'medium', 'hard', 'frantic'];
@@ -7,6 +8,8 @@ const DIFFICULTY_KEY = 'snake.difficulty';
 const CUSTOM_KEY = 'snake.custom';
 const MUSIC_KEY = 'snake.music';
 const MUSIC_RANDOM_KEY = 'snake.musicRandom';
+const TRACK_KEY = 'snake.track';
+const TRACK_RANDOM_KEY = 'snake.trackRandom';
 
 // Resolve storage inside the try: reading localStorage itself can throw when it is blocked.
 function guarded(action, fallback, message) {
@@ -73,12 +76,20 @@ export function saveCustom(custom, storage) {
   guarded(() => store(storage)?.setItem(CUSTOM_KEY, JSON.stringify(sanitize(custom))), undefined, 'Could not save custom settings');
 }
 
+// Music saved before the triggers belonged to slots used instrument-named keys; they map onto the slots in the old order.
+const OLD_MUSIC_KEYS = ['kickTrigger', 'bassTrigger', 'hatTrigger', 'melodyTrigger', 'snareTrigger', 'fastHatTrigger', 'arpTrigger', 'bassPulseTrigger', 'harmonyTrigger', 'counterTrigger', 'fillTrigger'];
+function withSlotKeys(saved) {
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return saved;
+  const converted = Object.fromEntries(OLD_MUSIC_KEYS.filter((old) => old in saved).map((old) => [SLOT_KEYS[OLD_MUSIC_KEYS.indexOf(old)], saved[old]]));
+  return { ...converted, ...saved };
+}
+
 export function loadMusic(storage) {
   return guarded(() => {
     const raw = store(storage)?.getItem(MUSIC_KEY);
     if (!raw) return sanitizeMusic({});
     try {
-      return sanitizeMusic(JSON.parse(raw));
+      return sanitizeMusic(withSlotKeys(JSON.parse(raw)));
     } catch {
       return sanitizeMusic({});
     }
@@ -97,4 +108,27 @@ export function loadMusicRandom(storage) {
 export function saveMusicRandom(on, storage) {
   if (typeof on !== 'boolean') return;
   guarded(() => store(storage)?.setItem(MUSIC_RANDOM_KEY, String(on)), undefined, 'Could not save music randomize setting');
+}
+
+// The chosen soundtrack: only a registered id is believed, anything else is Classic.
+export function loadTrack(storage) {
+  return guarded(() => {
+    const value = store(storage)?.getItem(TRACK_KEY);
+    return TRACK_IDS.includes(value) ? value : DEFAULT_TRACK;
+  }, DEFAULT_TRACK, 'Could not read track');
+}
+
+export function saveTrack(id, storage) {
+  if (!TRACK_IDS.includes(id)) return;
+  guarded(() => store(storage)?.setItem(TRACK_KEY, id), undefined, 'Could not save track');
+}
+
+// The "Randomize Track Every Game" toggle: stored as 'true' or 'false'; anything else means off.
+export function loadTrackRandom(storage) {
+  return guarded(() => store(storage)?.getItem(TRACK_RANDOM_KEY) === 'true', false, 'Could not read track randomize setting');
+}
+
+export function saveTrackRandom(on, storage) {
+  if (typeof on !== 'boolean') return;
+  guarded(() => store(storage)?.setItem(TRACK_RANDOM_KEY, String(on)), undefined, 'Could not save track randomize setting');
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
-  loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, loadMusicRandom, saveMusicRandom, SCORED,
+  loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, loadMusicRandom, saveMusicRandom, loadTrack, saveTrack, loadTrackRandom, saveTrackRandom, SCORED,
 } from '../src/storage.js';
 import { PRESETS, DEFAULT_MUSIC } from '../src/core/difficulty.js';
 
@@ -166,24 +166,26 @@ describe('custom settings', () => {
 describe('custom settings and music', () => {
   it('does not store music keys with the custom settings', () => {
     const s = fakeStorage();
-    saveCustom({ ...PRESETS.medium, kickTrigger: 5, snareTrigger: 9 }, s);
+    saveCustom({ ...PRESETS.medium, t0: 5, t4: 9 }, s);
     expect(Object.keys(JSON.parse(s.data['snake.custom'])).some((k) => k in DEFAULT_MUSIC)).toBe(false);
   });
   it('ignores music keys in an old saved custom', () => {
-    const old = fakeStorage({ 'snake.custom': JSON.stringify({ gridSize: 25, kickTrigger: 7, fillTrigger: 9 }) });
+    const old = fakeStorage({ 'snake.custom': JSON.stringify({ gridSize: 25, kickTrigger: 7, fillTrigger: 9, t0: 7, t10: 9 }) });
     const loaded = loadCustom(old);
     expect(loaded.gridSize).toBe(25);
     expect(loaded).not.toHaveProperty('kickTrigger');
+    expect(loaded).not.toHaveProperty('t0');
     expect(loaded).not.toHaveProperty('fillTrigger');
+    expect(loaded).not.toHaveProperty('t10');
   });
 });
 
 describe('music triggers', () => {
   it('round-trips under their own key', () => {
     const s = fakeStorage();
-    saveMusic({ ...DEFAULT_MUSIC, snareTrigger: 5, kickTrigger: 0 }, s);
+    saveMusic({ ...DEFAULT_MUSIC, t4: 5, t0: 0 }, s);
     expect(Object.keys(s.data)).toEqual(['snake.music']);
-    expect(loadMusic(s)).toEqual({ ...DEFAULT_MUSIC, snareTrigger: 5 });
+    expect(loadMusic(s)).toEqual({ ...DEFAULT_MUSIC, t4: 5 });
   });
   it('defaults when nothing or junk is stored', () => {
     expect(loadMusic(fakeStorage())).toEqual(DEFAULT_MUSIC);
@@ -192,14 +194,14 @@ describe('music triggers', () => {
     expect(loadMusic(fakeStorage({ 'snake.music': 'null' }))).toEqual(DEFAULT_MUSIC);
   });
   it('validates field by field, clamping 1001 and replacing bad values', () => {
-    const s = fakeStorage({ 'snake.music': JSON.stringify({ fillTrigger: 1001, hatTrigger: 'x', kickTrigger: -3, junk: 1 }) });
-    expect(loadMusic(s)).toEqual({ ...DEFAULT_MUSIC, fillTrigger: 1000, kickTrigger: 0 });
+    const s = fakeStorage({ 'snake.music': JSON.stringify({ t10: 1001, t2: 'x', t0: -3, junk: 1 }) });
+    expect(loadMusic(s)).toEqual({ ...DEFAULT_MUSIC, t10: 1000, t0: 0 });
   });
   it('saves the sanitized copy', () => {
     const s = fakeStorage();
-    saveMusic({ fillTrigger: 5000, junk: 1 }, s);
+    saveMusic({ t10: 5000, junk: 1 }, s);
     const stored = JSON.parse(s.data['snake.music']);
-    expect(stored.fillTrigger).toBe(1000);
+    expect(stored.t10).toBe(1000);
     expect(stored).not.toHaveProperty('junk');
     expect(Object.keys(stored)).toHaveLength(11);
   });
@@ -236,6 +238,80 @@ describe('randomize-every-game toggle', () => {
     const broken = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); } };
     expect(loadMusicRandom(broken)).toBe(false);
     expect(() => saveMusicRandom(true, broken)).not.toThrow();
+    expect(spy).toHaveBeenCalled();
+  });
+});
+
+describe('music saved with the old instrument-named keys', () => {
+  const OLD = {
+    kickTrigger: 1, bassTrigger: 2, hatTrigger: 3, melodyTrigger: 4, snareTrigger: 5, fastHatTrigger: 6,
+    arpTrigger: 7, bassPulseTrigger: 8, harmonyTrigger: 9, counterTrigger: 10, fillTrigger: 11,
+  };
+  it('loads into the slots in the old order', () => {
+    const s = fakeStorage({ 'snake.music': JSON.stringify(OLD) });
+    expect(loadMusic(s)).toEqual({ t0: 1, t1: 2, t2: 3, t3: 4, t4: 5, t5: 6, t6: 7, t7: 8, t8: 9, t9: 10, t10: 11 });
+  });
+  it('validates migrated values like any others and keeps defaults for missing ones', () => {
+    const s = fakeStorage({ 'snake.music': JSON.stringify({ snareTrigger: 5000, hatTrigger: 'x' }) });
+    expect(loadMusic(s)).toEqual({ ...DEFAULT_MUSIC, t4: 1000 });
+  });
+  it('prefers a slot key over its old name when both are stored', () => {
+    const s = fakeStorage({ 'snake.music': JSON.stringify({ kickTrigger: 9, t0: 3 }) });
+    expect(loadMusic(s).t0).toBe(3);
+  });
+  it('is written back with the new keys only', () => {
+    const s = fakeStorage({ 'snake.music': JSON.stringify(OLD) });
+    saveMusic(loadMusic(s), s);
+    expect(Object.keys(JSON.parse(s.data['snake.music']))).toEqual(['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7', 't8', 't9', 't10']);
+  });
+});
+
+describe('track choice', () => {
+  it('round-trips under its own key', () => {
+    const s = fakeStorage();
+    saveTrack('classic', s);
+    expect(s.data).toEqual({ 'snake.track': 'classic' });
+    expect(loadTrack(s)).toBe('classic');
+  });
+  it('defaults to classic for nothing, junk or an unknown id', () => {
+    expect(loadTrack(fakeStorage())).toBe('classic');
+    ['', 'disco', 'null', '__proto__'].forEach((raw) => expect(loadTrack(fakeStorage({ 'snake.track': raw }))).toBe('classic'));
+  });
+  it('does not save an unknown id', () => {
+    const s = fakeStorage();
+    saveTrack('disco', s);
+    expect(s.data).toEqual({});
+  });
+  it('survives broken storage', () => {
+    const spy = quiet();
+    const broken = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); } };
+    expect(loadTrack(broken)).toBe('classic');
+    expect(() => saveTrack('classic', broken)).not.toThrow();
+    expect(spy).toHaveBeenCalled();
+  });
+});
+
+describe('randomize-track toggle', () => {
+  it('stores true or false under its own key, off by default', () => {
+    const s = fakeStorage();
+    expect(loadTrackRandom(s)).toBe(false);
+    saveTrackRandom(true, s);
+    expect(s.data).toEqual({ 'snake.trackRandom': 'true' });
+    expect(loadTrackRandom(s)).toBe(true);
+    saveTrackRandom(false, s);
+    expect(loadTrackRandom(s)).toBe(false);
+  });
+  it('treats anything but "true" as off and ignores non-boolean saves', () => {
+    ['', 'yes', '1', 'TRUE'].forEach((raw) => expect(loadTrackRandom(fakeStorage({ 'snake.trackRandom': raw }))).toBe(false));
+    const s = fakeStorage();
+    saveTrackRandom('true', s);
+    expect(s.data).toEqual({});
+  });
+  it('survives broken storage', () => {
+    const spy = quiet();
+    const broken = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); } };
+    expect(loadTrackRandom(broken)).toBe(false);
+    expect(() => saveTrackRandom(true, broken)).not.toThrow();
     expect(spy).toHaveBeenCalled();
   });
 });
