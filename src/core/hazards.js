@@ -14,6 +14,8 @@ export const PLACEMENT_ATTEMPTS = 50;
 export const FADE_STEPS = 40;
 export const FLASH_PERIOD = 4;
 const ENEMY_MOVE_EVERY = 2;
+// A move that continues the enemy's direction is this many times as likely as each turn.
+export const STRAIGHT_WEIGHT = 6;
 
 const MEDIUM = PRESETS.medium;
 
@@ -264,6 +266,24 @@ export function placeWithin(work, world, hazards, rng, s = MEDIUM, { now = () =>
 export const spawnForApple = (world, hazards, rng, apples, s = MEDIUM) =>
   placeWithin(startPlacement(apples), world, hazards, rng, s).hazards;
 
+// One draw from `rng` picks among the safe moves. Straight on (head minus the second cell; a one-cell enemy has no
+// direction) weighs STRAIGHT_WEIGHT, every other move 1. The draw, scaled to the total weight, falls into consecutive
+// slots: straight on first, then the turns in neighbour order. Without a straight move all weights are 1, which is
+// the plain uniform pick.
+function weightedMove(options, cells, rng) {
+  const [head, neck] = cells;
+  const ahead = neck ? { x: 2 * head.x - neck.x, y: 2 * head.y - neck.y } : null;
+  const straight = ahead ? options.find((o) => sameCell(o, ahead)) : undefined;
+  const ordered = straight ? [straight, ...options.filter((o) => o !== straight)] : options;
+  const weight = (o) => (o === straight ? STRAIGHT_WEIGHT : 1);
+  let draw = rng() * ordered.reduce((total, o) => total + weight(o), 0);
+  for (const o of ordered) {
+    draw -= weight(o);
+    if (draw < 0) return o;
+  }
+  return ordered.at(-1);
+}
+
 function stepEnemy(enemy, { snake, food, others, size = GRID_SIZE, pending = 0 }, rng) {
   if (enemy.status === 'dead') return enemy;
   if (enemy.status === 'ghost') {
@@ -282,7 +302,7 @@ function stepEnemy(enemy, { snake, food, others, size = GRID_SIZE, pending = 0 }
     return hasRoute(snake, withEnemy, food, size, pending);
   });
   if (options.length === 0) return { ...enemy, status: 'dead' };
-  const pick = options[Math.floor(rng() * options.length)];
+  const pick = weightedMove(options, enemy.cells, rng);
   return { ...enemy, cells: [pick, ...enemy.cells.slice(0, -1)] };
 }
 

@@ -955,3 +955,78 @@ describe('placement shape rules', () => {
     }
   });
 });
+
+describe('enemy movement prefers straight on', () => {
+  const body = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }]; // heading right
+  const far = [{ x: 1, y: 1 }, { x: 0, y: 1 }, { x: 0, y: 0 }];
+  const enemyOf = (cells) => ({ cells, age: 1, telegraph: 1, status: 'alive' });
+  const wallAt = (...cells) => ({ cells, age: 99, telegraph: 1 });
+  const DECISIONS = 4000;
+  // Many decisions on a fresh copy of the same board; returns how often each destination was chosen.
+  const shares = (cells, walls = [], seed = 11) => {
+    const rng = seeded(seed);
+    const counts = new Map();
+    for (let i = 0; i < DECISIONS; i++) {
+      const next = stepHazards({ walls, bombs: [], enemies: [enemyOf(cells)] }, { snake: far, food: { x: 18, y: 18 }, size: 20 }, rng);
+      const e = next.enemies[0];
+      expect(e.status).toBe('alive');
+      counts.set(cellKey(e.cells[0]), (counts.get(cellKey(e.cells[0])) ?? 0) + 1);
+    }
+    return (x, y) => (counts.get(`${x},${y}`) ?? 0) / DECISIONS;
+  };
+
+  it('goes straight 6 times in 8 when both turns are open', () => {
+    const share = shares(body);
+    expect(share(11, 10)).toBeGreaterThan(0.72);
+    expect(share(11, 10)).toBeLessThan(0.78);
+    expect(share(10, 9)).toBeGreaterThan(0.1);
+    expect(share(10, 9)).toBeLessThan(0.15);
+    expect(share(10, 11)).toBeGreaterThan(0.1);
+    expect(share(10, 11)).toBeLessThan(0.15);
+  });
+  it('goes straight 6 times in 7 when only one turn is open', () => {
+    const share = shares(body, [wallAt({ x: 10, y: 11 })]);
+    expect(share(11, 10)).toBeGreaterThan(6 / 7 - 0.03);
+    expect(share(11, 10)).toBeLessThan(6 / 7 + 0.03);
+    expect(share(10, 11)).toBe(0);
+  });
+  it('always goes straight when that is the only safe move', () => {
+    const share = shares(body, [wallAt({ x: 10, y: 11 }, { x: 10, y: 9 })]);
+    expect(share(11, 10)).toBe(1);
+  });
+  it('shares the turns equally when straight on is not safe', () => {
+    const share = shares(body, [wallAt({ x: 11, y: 10 })]);
+    expect(share(11, 10)).toBe(0);
+    expect(share(10, 9)).toBeGreaterThan(0.46);
+    expect(share(10, 9)).toBeLessThan(0.54);
+    expect(share(10, 11)).toBeGreaterThan(0.46);
+    expect(share(10, 11)).toBeLessThan(0.54);
+  });
+  it('picks uniformly for a one-cell enemy, which has no direction', () => {
+    const share = shares([{ x: 10, y: 10 }]);
+    [[11, 10], [9, 10], [10, 9], [10, 11]].forEach(([x, y]) => {
+      expect(share(x, y)).toBeGreaterThan(0.22);
+      expect(share(x, y)).toBeLessThan(0.28);
+    });
+  });
+  it('uses the injected rng once per decision: the first 6/8 of [0, 1) is straight on, then one eighth per turn', () => {
+    let calls = 0;
+    const run = (value) => stepHazards({ walls: [], bombs: [], enemies: [enemyOf(body)] }, { snake: far, food: { x: 18, y: 18 }, size: 20 }, () => { calls++; return value; }).enemies[0].cells[0];
+    expect([run(0), run(0.74)]).toEqual([{ x: 11, y: 10 }, { x: 11, y: 10 }]);
+    const turns = [run(0.76), run(0.99)];
+    expect(turns).toEqual(expect.arrayContaining([{ x: 10, y: 9 }, { x: 10, y: 11 }]));
+    expect(calls).toBe(4);
+  });
+  it('never reverses', () => {
+    const rng = seeded(5);
+    let h = { walls: [], bombs: [], enemies: [enemyOf(body)] };
+    for (let i = 0; i < 60; i++) {
+      const before = h.enemies[0];
+      h = { ...h, enemies: [{ ...before, age: 1 }] };
+      h = stepHazards(h, { snake: far, food: { x: 18, y: 18 }, size: 20 }, rng);
+      const after = h.enemies[0];
+      if (after.status !== 'alive') break;
+      expect(cellKey(after.cells[0])).not.toBe(cellKey(before.cells[1]));
+    }
+  });
+});

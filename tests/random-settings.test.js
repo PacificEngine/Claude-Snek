@@ -16,10 +16,10 @@ const triggers = FIELDS.filter((f) => f.key.endsWith('Trigger'));
 const HALF_CAPS = [200, 400, 600, 800];
 
 describe('randomSettings', () => {
-  it('returns exactly the 28 difficulty fields and no music triggers, each valid (sanitize leaves them unchanged)', () => {
+  it('returns exactly the 29 difficulty fields and no music triggers, each valid (sanitize leaves them unchanged)', () => {
     rolls.forEach((r) => {
       expect(Object.keys(r).sort()).toEqual(FIELDS.map((f) => f.key).sort());
-      expect(FIELDS).toHaveLength(28);
+      expect(FIELDS).toHaveLength(29);
       MUSIC_FIELDS.forEach((f) => expect(r).not.toHaveProperty(f.key));
       expect(sanitize(r)).toEqual(r);
     });
@@ -76,11 +76,27 @@ describe('randomSettings', () => {
       expect(r.enemyMax).toBeLessThanOrEqual(Math.min(10, Math.max(1, Math.floor(0.1 * cells))));
     });
   });
+  it('rolls the start size from 3 up to min(max size, half the map), after the grid size and max size', () => {
+    rolls.forEach((r) => {
+      expect(Number.isInteger(r.startLength)).toBe(true);
+      expect(r.startLength).toBeGreaterThanOrEqual(3);
+      expect(r.startLength).toBeLessThanOrEqual(Math.min(r.maxLength, Math.floor(r.gridSize ** 2 / 2)));
+    });
+    expect(new Set(rolls.map((r) => r.startLength)).size).toBeGreaterThan(30);
+    expect(randomSettings(() => 0).startLength).toBe(3);
+    expect(randomSettings(() => 0.999999).startLength).toBe(1000);
+  });
+  it('rolls the start size uniformly within its limit (a roll of 0.5 lands mid-range)', () => {
+    const mid = randomSettings(() => 0.5);
+    const limit = Math.min(mid.maxLength, Math.floor(mid.gridSize ** 2 / 2));
+    expect(mid.startLength).toBe(3 + Math.floor(0.5 * (limit - 3 + 1)));
+  });
   it('uses the caps on a 10x10 board', () => {
     const small = rolls.filter((r) => r.gridSize === 10);
     expect(small.length).toBeGreaterThan(0);
     small.forEach((r) => {
       expect(r.maxLength).toBeLessThanOrEqual(50);
+      expect(r.startLength).toBeLessThanOrEqual(50);
       expect(r.wallSpawnMax).toBeLessThanOrEqual(20);
       expect(r.wallSpawnMax).toBeGreaterThanOrEqual(10);
       expect(r.bombMax).toBeLessThanOrEqual(10);

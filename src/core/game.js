@@ -1,6 +1,6 @@
 import { START_LENGTH } from './config.js';
 import { VECTORS, OPPOSITE, cellKey, sameCell, inBounds, allCells } from './grid.js';
-import { reachable } from './pathing.js';
+import { reachable, hasRoute } from './pathing.js';
 import { deadEndCells } from './shape.js';
 import { PRESETS } from './difficulty.js';
 import { emptyHazards, hitsHazard, stepHazards, startPlacement, placeWithin, blockedKeys } from './hazards.js';
@@ -20,10 +20,25 @@ export function placeFood(snake, rng, blocked = new Set(), size = PRESETS.medium
   return pool[Math.floor(rng() * pool.length)];
 }
 
+// The starting snake: head at the centre heading right, body trailing left along the head's row to the edge, then a
+// zig-zag through the rows above (up at the left edge, right along the row, up at the right edge, left, ...).
+// Consecutive cells are always adjacent and the cells ahead of the head stay free; any length up to half the board fits.
+export function startSnake(size, length) {
+  const mid = Math.floor(size / 2);
+  const snake = [];
+  for (let i = 0; i < length; i++) {
+    if (i <= mid) { snake.push({ x: mid - i, y: mid }); continue; }
+    const j = i - mid - 1;
+    const row = Math.floor(j / size);
+    const along = j % size;
+    snake.push({ x: row % 2 === 0 ? along : size - 1 - along, y: mid - 1 - row });
+  }
+  return snake;
+}
+
 export function createState(rng, settings = PRESETS.medium) {
   const size = settings.gridSize;
-  const mid = Math.floor(size / 2);
-  const snake = Array.from({ length: START_LENGTH }, (_, i) => ({ x: mid - i, y: mid }));
+  const snake = startSnake(size, settings.startLength ?? START_LENGTH);
   return {
     snake,
     direction: 'right',
@@ -57,6 +72,17 @@ function growthAfterApple(growth, growthSetting) {
   const carry = growth.carry + Math.round(growthSetting * 10);
   const cells = Math.floor(carry / 10);
   return { carry: carry - cells * 10, cells };
+}
+
+// A dead enemy stays on the board and can wall in the apple. If an enemy died in this step and the apple can no longer
+// be reached or has become a dead end, it is placed again with the normal rules (same rng stream); otherwise it stays.
+function foodAfterDeaths(food, before, after, snake, rng, size, pending) {
+  if (food === null) return food;
+  const died = after.enemies.some((e, i) => e.status === 'dead' && before.enemies[i].status !== 'dead');
+  if (!died) return food;
+  const blocked = blockedKeys(after);
+  const trapped = !hasRoute(snake, blocked, food, size, pending) || deadEndCells(blocked, size).has(cellKey(food));
+  return trapped ? placeFood(snake, rng, blocked, size, pending) : food;
 }
 
 // One game step. `opts.budgetMs` with an injected clock `opts.now` (ms) spreads an apple's obstacle placement over
@@ -96,8 +122,12 @@ export function tick(state, rng, opts = {}) {
   const place = (work, food) =>
     placeWithin(work, { snake, direction, food, size, pending: growth.pending }, stepped, rng, settings, opts);
   if (!eating) {
-    const placed = place(state.placement ?? null, state.food);
-    return { ...state, snake, direction, queued, hazards: placed.hazards, placement: placed.work, growth };
+    const food = foodAfterDeaths(state.food, hazards, stepped, snake, rng, size, growth.pending);
+    const placed = place(state.placement ?? null, food);
+    return {
+      ...state, snake, direction, queued, food, hazards: placed.hazards, placement: placed.work, growth,
+      status: food === null && state.food !== null ? 'gameOver' : state.status, // no room left for a re-placed apple
+    };
   }
 
   const score = state.score + 1;

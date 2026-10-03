@@ -58,6 +58,10 @@ Obstacles that appear as the player eats apples and make the board harder: first
 **No islands:**
 - When a wall or a bomb is placed (first walls, spawned walls, re-laid walls, bombs), every cell of the board that is not a wall or bomb must stay connected (four-neighbour moves) to every other such cell. No cell and no group of cells may be cut off from the rest of the board by walls, bombs and the board edge. The snake's own body does not count as a barrier here, and enemies are ignored (they move). A placement that would create an island is rejected and retried like any other failed placement.
 
+**Enemy movement:** an enemy that can move straight on or turn picks "straight on" six times as often as each turn (weights: straight 6, every turn option 1, among the safe moves only; if straight is not safe the turns share equally; a one-cell enemy has no direction and picks uniformly).
+
+**An apple trapped by dead enemies:** when an enemy dies it stays as an obstacle and can wall in or cut off the apple. In that step, if the apple is no longer reachable from the head or has become a dead end, the apple is placed again on another cell with the normal food rules (a reachable cell that is not a dead end).
+
 **No dead-end apples:**
 - The apple is never placed in a single-tile-wide dead end, i.e. a spot where eating it would leave the snake with no way out except dying. Precisely: take the free cells (not a wall, bomb, enemy or the board edge; the snake's body is ignored because it moves) and repeatedly remove every cell that has at most one free neighbour left (this peels corridors that end in a dead end, however long). A cell removed this way is a dead end, and the apple is never placed on one. Placement prefers the cells that pass; only if none pass (a nearly full board) does it fall back to any reachable free cell.
 - A wall or bomb placement is also rejected if it would turn the cell the apple is on into such a dead end.

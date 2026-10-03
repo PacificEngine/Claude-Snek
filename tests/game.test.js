@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { createState, placeFood, queueDirection, tick, togglePause } from '../src/core/game.js';
+import { createState, startSnake, placeFood, queueDirection, tick, togglePause } from '../src/core/game.js';
 import { GRID_SIZE, START_LENGTH } from '../src/core/config.js';
-import { emptyHazards } from '../src/core/hazards.js';
+import { emptyHazards, blockedKeys } from '../src/core/hazards.js';
+import { hasRoute } from '../src/core/pathing.js';
+import { deadEndCells } from '../src/core/shape.js';
 import { PRESETS } from '../src/core/difficulty.js';
 import { bpm } from '../src/core/pacing.js';
 
@@ -29,6 +31,74 @@ describe('createState', () => {
   it('places food off the snake', () => {
     const s = createState(rng);
     expect(s.snake).not.toContainEqual(s.food);
+  });
+});
+
+describe('start snake layout', () => {
+  const key = (c) => `${c.x},${c.y}`;
+  const adjacent = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1;
+  const cases = [10, 20, 50].flatMap((size) => {
+    const half = Math.floor((size * size) / 2);
+    return [3, 10, 60, half].filter((n) => n <= half).map((n) => [size, n]);
+  });
+  it.each(cases)('lays out board %i, length %i, as a connected, unique, in-bounds snake', (size, length) => {
+    const snake = startSnake(size, length);
+    const mid = Math.floor(size / 2);
+    expect(snake).toHaveLength(length);
+    expect(snake[0]).toEqual({ x: mid, y: mid });
+    snake.forEach((c) => {
+      expect(c.x).toBeGreaterThanOrEqual(0);
+      expect(c.x).toBeLessThan(size);
+      expect(c.y).toBeGreaterThanOrEqual(0);
+      expect(c.y).toBeLessThan(size);
+    });
+    expect(new Set(snake.map(key)).size).toBe(length);
+    for (let i = 1; i < length; i++) expect(adjacent(snake[i - 1], snake[i])).toBe(true);
+    // heading right: the neck is to the left of the head, and every cell ahead of the head on its row is free
+    expect(snake[1]).toEqual({ x: mid - 1, y: mid });
+    const taken = new Set(snake.map(key));
+    for (let x = mid + 1; x < size; x++) expect(taken.has(`${x},${mid}`)).toBe(false);
+  });
+  it('is exactly the old three-cell snake at length 3', () => {
+    expect(startSnake(20, 3)).toEqual([{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }]);
+  });
+  it('trails left along the head row, then zig-zags through the rows above', () => {
+    expect(startSnake(10, 8)).toEqual([
+      ...[5, 4, 3, 2, 1, 0].map((x) => ({ x, y: 5 })),
+      { x: 0, y: 4 }, { x: 1, y: 4 },
+    ]);
+    const s = startSnake(10, 6 + 10 + 2);
+    expect(s.slice(6, 16).map((c) => c.x)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(s.slice(16)).toEqual([{ x: 9, y: 3 }, { x: 8, y: 3 }]);
+  });
+  it('createState uses settings.startLength (3 when the settings have none)', () => {
+    const s = createState(rng, { ...PRESETS.medium, startLength: 60 });
+    expect(s.snake).toEqual(startSnake(20, 60));
+    expect(s.snake).not.toContainEqual(s.food);
+    const { startLength, ...old } = PRESETS.medium;
+    expect(createState(rng, old).snake).toHaveLength(3);
+  });
+  it('plays a few ticks with a big start snake: it moves, the tail follows, food stays off the body', () => {
+    let s = createState(rng, { ...PRESETS.medium, startLength: 200, growth: 0 });
+    expect(s.snake).toHaveLength(200);
+    const settingsRng = () => 0.3;
+    for (let i = 0; i < 5; i++) {
+      s = tick(s, settingsRng);
+      expect(s.status).toBe('playing');
+      expect(s.snake).toHaveLength(200);
+      expect(new Set(s.snake.map(key)).size).toBe(200);
+      expect(s.snake).not.toContainEqual(s.food);
+    }
+    expect(s.snake[0]).toEqual({ x: 15, y: 10 });
+  });
+  it('places food on a cell not on the body, reachable, after eating with a big start snake', () => {
+    const settings = { ...PRESETS.medium, startLength: 100, growth: 0 };
+    const base = createState(rng, settings);
+    const head = base.snake[0];
+    const s = tick({ ...base, food: { x: head.x + 1, y: head.y } }, () => 0.5);
+    expect(s.score).toBe(1);
+    expect(s.snake).not.toContainEqual(s.food);
+    expect(s.status).toBe('playing');
   });
 });
 
@@ -553,5 +623,98 @@ describe('placeFood avoids dead ends', () => {
   it('is deterministic for a seed', () => {
     const blocked = room(8);
     expect(placeFood(head, seeded(7), blocked, 8)).toEqual(placeFood(head, seeded(7), blocked, 8));
+  });
+});
+
+describe('an apple trapped by a dead enemy', () => {
+  const wallAt = (...cells) => ({ cells, age: 99, telegraph: 1 });
+  const enemy = (cells, status = 'alive') => ({ cells, age: 1, telegraph: 1, status });
+  const seededRng = (seed) => {
+    let a = seed;
+    return () => {
+      a |= 0; a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+  const counting = (inner) => { const f = () => { f.calls++; return inner(); }; f.calls = 0; return f; };
+  const food = { x: 15, y: 15 };
+  // A pocket round the food: walls left, right and below, and the enemy sealing the top. The enemy cannot move
+  // without opening a route it must not open, so it dies in place this step.
+  const sealed = (overrides = {}) => stateWith({
+    food,
+    hazards: {
+      walls: [wallAt({ x: 14, y: 15 }, { x: 16, y: 15 }, { x: 15, y: 16 })],
+      bombs: [],
+      enemies: [enemy([{ x: 15, y: 14 }, { x: 15, y: 13 }, { x: 15, y: 12 }])],
+    },
+    ...overrides,
+  });
+  const reachableFood = (s) => hasRoute(s.snake, blockedKeys(s.hazards), s.food, 20, 0) && !deadEndCells(blockedKeys(s.hazards), 20).has(`${s.food.x},${s.food.y}`);
+
+  it('moves the apple when an enemy dies in this step and walls it in', () => {
+    const rng = counting(seededRng(3));
+    const s = tick(sealed(), rng);
+    expect(s.hazards.enemies[0].status).toBe('dead');
+    expect(s.food).not.toEqual(food);
+    expect(s.snake).not.toContainEqual(s.food);
+    expect(reachableFood(s)).toBe(true);
+    expect(s.status).toBe('playing');
+    expect(rng.calls).toBeGreaterThan(0);
+  });
+  it('moves the apple when the dying enemy leaves it in a dead end', () => {
+    // walls on three sides, open above: reachable but a dead end; an enemy dies elsewhere in the same step
+    const s = tick(stateWith({
+      food,
+      hazards: {
+        walls: [wallAt({ x: 14, y: 15 }, { x: 16, y: 15 }, { x: 15, y: 16 }, { x: 0, y: 1 })],
+        bombs: [],
+        enemies: [enemy([{ x: 0, y: 0 }, { x: 1, y: 0 }])],
+      },
+    }), seededRng(4));
+    expect(s.hazards.enemies.some((e) => e.status === 'dead')).toBe(true);
+    expect(s.food).not.toEqual(food);
+    expect(reachableFood(s)).toBe(true);
+  });
+  it('moves an apple cut off in a roomy pocket (unreachable but not a dead end)', () => {
+    const ring = [[14, 15], [14, 16], [17, 15], [17, 16], [15, 14], [16, 14], [15, 17], [16, 17]].map(([x, y]) => ({ x, y }));
+    const s = tick(stateWith({
+      food,
+      hazards: { walls: [wallAt(...ring, { x: 0, y: 1 })], bombs: [], enemies: [enemy([{ x: 0, y: 0 }, { x: 1, y: 0 }])] },
+    }), seededRng(6));
+    expect(s.hazards.enemies[0].status).toBe('dead');
+    expect(s.food).not.toEqual(food);
+    expect(reachableFood(s)).toBe(true);
+  });
+  it('leaves the apple in place when the dying enemy does not affect it', () => {
+    const rng = counting(seededRng(3));
+    const s = tick(stateWith({
+      food: { x: 15, y: 15 },
+      hazards: { walls: [wallAt({ x: 0, y: 1 })], bombs: [], enemies: [enemy([{ x: 0, y: 0 }, { x: 1, y: 0 }])] },
+    }), rng);
+    expect(s.hazards.enemies[0].status).toBe('dead');
+    expect(s.food).toEqual({ x: 15, y: 15 });
+    expect(rng.calls).toBe(0);
+  });
+  it('does not re-place the apple when no enemy dies (the rng is not used)', () => {
+    const rng = counting(seededRng(3));
+    const s = tick(stateWith({
+      food,
+      hazards: { walls: [wallAt({ x: 14, y: 15 }, { x: 16, y: 15 }, { x: 15, y: 16 }, { x: 15, y: 14 })], bombs: [], enemies: [] },
+    }), rng);
+    expect(s.food).toEqual(food);
+    expect(rng.calls).toBe(0);
+  });
+  it('does not re-place the apple for an enemy that was already dead', () => {
+    const rng = counting(seededRng(3));
+    const dead = { ...enemy([{ x: 15, y: 14 }, { x: 15, y: 13 }, { x: 15, y: 12 }], 'dead'), age: 5 };
+    const s = tick(sealed({ hazards: { ...sealed().hazards, enemies: [dead] } }), rng);
+    expect(s.food).toEqual(food);
+    expect(rng.calls).toBe(0);
+  });
+  it('is deterministic for a seed', () => {
+    expect(tick(sealed(), seededRng(9))).toEqual(tick(sealed(), seededRng(9)));
+    expect(tick(sealed(), seededRng(9)).food).not.toEqual(tick(sealed(), seededRng(10)).food);
   });
 });
