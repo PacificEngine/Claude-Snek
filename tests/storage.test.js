@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, loadMusicRandom, saveMusicRandom, loadTrack, saveTrack, loadTrackRandom, saveTrackRandom, SCORED,
+  loadThemes, saveThemes, loadThemeChoice, saveThemeChoice, loadThemeMatch, saveThemeMatch, loadThemeRandom, saveThemeRandom, loadStyleRandom, saveStyleRandom,
 } from '../src/storage.js';
 import { TRACK_IDS } from '../src/core/track.js';
+import { DEFAULT_THEMES, sanitizeThemes } from '../src/core/theme.js';
 import { PRESETS, DEFAULT_MUSIC, DEFAULT_ALL_MUSIC } from '../src/core/difficulty.js';
 
 const fakeStorage = (initial = {}) => {
@@ -352,5 +354,94 @@ describe('per-track music storage', () => {
     expect(stored.midnight.t10).toBe(1000);
     expect(stored.midnight).not.toHaveProperty('junk');
     expect(stored.classic).toEqual(DEFAULT_MUSIC);
+  });
+});
+
+describe('theme storage', () => {
+  const broken = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); } };
+  it('defaults every theme when nothing, junk or a non-object is stored', () => {
+    expect(loadThemes(fakeStorage())).toEqual(DEFAULT_THEMES);
+    ['{oops', 'null', '[]', '"x"', '7'].forEach((raw) => expect(loadThemes(fakeStorage({ 'snake.themes': raw }))).toEqual(DEFAULT_THEMES));
+  });
+  it('round-trips an edited theme under snake.themes, sanitized', () => {
+    const s = fakeStorage();
+    const themes = sanitizeThemes({});
+    themes.neon = { ...themes.neon, colors: { ...themes.neon.colors, board: '#123456' }, shapes: { ...themes.neon.shapes, head: 'star' } };
+    saveThemes(themes, s);
+    expect(Object.keys(s.data)).toEqual(['snake.themes']);
+    const loaded = loadThemes(s);
+    expect(loaded.neon.colors.board).toBe('#123456');
+    expect(loaded.neon.shapes.head).toBe('star');
+    expect(loaded.classic).toEqual(DEFAULT_THEMES.classic);
+  });
+  it('saves the sanitized copy, never bad values or unknown ids', () => {
+    const s = fakeStorage();
+    saveThemes({ neon: { colors: { board: 'javascript:1', head: '#ABCDEF' }, shapes: { head: 'blob' } }, bogus: {} }, s);
+    const stored = JSON.parse(s.data['snake.themes']);
+    expect(stored).not.toHaveProperty('bogus');
+    expect(stored.neon.colors.board).toBe(DEFAULT_THEMES.neon.colors.board);
+    expect(stored.neon.colors.head).toBe('#abcdef');
+    expect(stored.neon.shapes.head).toBe(DEFAULT_THEMES.neon.shapes.head);
+  });
+  it('repairs a bad field on load without touching the others', () => {
+    const raw = JSON.stringify({ storm: { colors: { board: '#12', head: '#00ff00' }, shapes: { wall: 'nope' } } });
+    const loaded = loadThemes(fakeStorage({ 'snake.themes': raw }));
+    expect(loaded.storm.colors.board).toBe(DEFAULT_THEMES.storm.colors.board);
+    expect(loaded.storm.colors.head).toBe('#00ff00');
+    expect(loaded.storm.shapes.wall).toBe(DEFAULT_THEMES.storm.shapes.wall);
+  });
+  it('stores the theme choice as an id, Classic by default and for anything unknown', () => {
+    const s = fakeStorage();
+    expect(loadThemeChoice(s)).toBe('classic');
+    saveThemeChoice('storm', s);
+    expect(s.data).toEqual({ 'snake.themeChoice': 'storm' });
+    expect(loadThemeChoice(s)).toBe('storm');
+    saveThemeChoice('bogus', s);
+    expect(loadThemeChoice(s)).toBe('storm');
+    expect(loadThemeChoice(fakeStorage({ 'snake.themeChoice': 'bogus' }))).toBe('classic');
+    TRACK_IDS.forEach((id) => { saveThemeChoice(id, s); expect(loadThemeChoice(s)).toBe(id); });
+  });
+  it('stores Match as true or false, on by default and for junk', () => {
+    const s = fakeStorage();
+    expect(loadThemeMatch(s)).toBe(true);
+    saveThemeMatch(false, s);
+    expect(s.data).toEqual({ 'snake.themeMatch': 'false' });
+    expect(loadThemeMatch(s)).toBe(false);
+    saveThemeMatch(true, s);
+    expect(s.data).toEqual({ 'snake.themeMatch': 'true' });
+    expect(loadThemeMatch(s)).toBe(true);
+    ['', 'yes', '0', 'FALSE', 'null'].forEach((raw) => expect(loadThemeMatch(fakeStorage({ 'snake.themeMatch': raw }))).toBe(true));
+    const t = fakeStorage();
+    saveThemeMatch('false', t);
+    expect(t.data).toEqual({});
+  });
+  it.each([
+    ['theme random', loadThemeRandom, saveThemeRandom, 'snake.themeRandom'],
+    ['style random', loadStyleRandom, saveStyleRandom, 'snake.styleRandom'],
+  ])('stores %s as true or false, off by default and for junk', (_, load, save, key) => {
+    const s = fakeStorage();
+    expect(load(s)).toBe(false);
+    save(true, s);
+    expect(s.data).toEqual({ [key]: 'true' });
+    expect(load(s)).toBe(true);
+    save(false, s);
+    expect(load(s)).toBe(false);
+    ['', 'yes', '1', 'TRUE'].forEach((raw) => expect(load(fakeStorage({ [key]: raw }))).toBe(false));
+    const t = fakeStorage();
+    save('true', t);
+    expect(t.data).toEqual({});
+  });
+  it('survives broken storage with defaults and no throw', () => {
+    const spy = quiet();
+    expect(loadThemes(broken)).toEqual(DEFAULT_THEMES);
+    expect(loadThemeChoice(broken)).toBe('classic');
+    expect(loadThemeMatch(broken)).toBe(true);
+    expect(loadThemeRandom(broken)).toBe(false);
+    expect(loadStyleRandom(broken)).toBe(false);
+    expect(() => {
+      saveThemes(DEFAULT_THEMES, broken); saveThemeChoice('storm', broken); saveThemeMatch(false, broken);
+      saveThemeRandom(true, broken); saveStyleRandom(true, broken);
+    }).not.toThrow();
+    expect(spy).toHaveBeenCalled();
   });
 });

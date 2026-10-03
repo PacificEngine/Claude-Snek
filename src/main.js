@@ -1,11 +1,12 @@
 import { createState, queueDirection, tick, togglePause } from './core/game.js';
 import { bpm, activeLayers, placementBudgetMs } from './core/pacing.js';
 import { createLayerGate } from './core/layer-gate.js';
-import { loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, loadMusicRandom, saveMusicRandom, loadTrack, saveTrack, loadTrackRandom, saveTrackRandom, SCORED } from './storage.js';
+import { loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, loadMusicRandom, saveMusicRandom, loadTrack, saveTrack, loadTrackRandom, saveTrackRandom, loadThemes, saveThemes, loadThemeChoice, saveThemeChoice, loadThemeMatch, saveThemeMatch, loadThemeRandom, saveThemeRandom, loadStyleRandom, saveStyleRandom, SCORED } from './storage.js';
 import { settingsFor, withMusic, musicForGame, musicOf, trackForGame, trackSelectState } from './core/difficulty.js';
 import { createMenu, difficultyLabel } from './menu.js';
 import { actionForKey, actionForButton } from './input.js';
 import { TRACKS } from './core/track.js';
+import { themeForGame, sanitizeThemes } from './core/theme.js';
 import { createSynth } from './synth.js';
 import { createConductor } from './conductor.js';
 import { render } from './renderer.js';
@@ -35,6 +36,15 @@ let musicRandom = loadMusicRandom();
 let track = loadTrack();
 let trackRandom = loadTrackRandom();
 let gameTrack = trackForGame(track, trackRandom, Math.random);
+// The look of the board: the themes (as edited), which one to use, and the per-game choices. The theme of a game is decided where the
+// game track is (load, Apply, game over) and never saved; a random pick or style never replaces a saved theme.
+let themes = loadThemes();
+let themeChoice = loadThemeChoice();
+let themeMatch = loadThemeMatch();
+let themeRandom = loadThemeRandom();
+let styleRandom = loadStyleRandom();
+const rollTheme = () => themeForGame({ themes, themeChoice, match: themeMatch, themeRandom, styleRandom, track: gameTrack }, Math.random);
+let gameTheme = rollTheme();
 // The settings for the next run: the difficulty's (Random re-rolls here, but never the music) plus the global music triggers.
 // "Randomize Triggers Every Game" swaps in a fresh music roll for that game only; `music` (the player's own) is never replaced by it.
 const nextSettings = (gameMusic = musicForGame(musicOf(music, gameTrack), musicRandom, Math.random), base = settingsFor(difficulty, custom, Math.random)) =>
@@ -81,7 +91,7 @@ function updateHud() {
 const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 function draw() {
-  render(ctx, state, { reducedMotion: reducedMotionQuery.matches });
+  render(ctx, state, { theme: gameTheme, reducedMotion: reducedMotionQuery.matches });
   updateHud();
 }
 
@@ -104,6 +114,7 @@ function advance() {
     // Random re-rolls for the next run now, so the menu shows what the next run will use.
     settings = nextSettings();
     gameTrack = trackForGame(track, trackRandom, Math.random);
+    gameTheme = rollTheme();
   }
   draw();
 }
@@ -116,20 +127,31 @@ function restart() {
 
 // `roll` is the Random roll the dialog previewed, so what was shown is what runs.
 // The saved track is not a menu setting (the header selector owns it); Apply only re-rolls the game track from it.
-function applyDifficulty(nextDifficulty, nextCustom, roll, nextMusic, nextMusicRandom, musicRoll, nextTrackRandom = trackRandom) {
+function applyDifficulty(nextDifficulty, nextCustom, roll, nextMusic, nextMusicRandom, musicRoll, nextTrackRandom = trackRandom, nextThemes = themes, nextThemeChoice = themeChoice, nextThemeMatch = themeMatch, nextThemeRandom = themeRandom, nextStyleRandom = styleRandom) {
   stopBeat();
   difficulty = nextDifficulty;
   custom = nextCustom;
   music = nextMusic;
   musicRandom = nextMusicRandom;
   trackRandom = nextTrackRandom;
+  themes = sanitizeThemes(nextThemes);
+  themeChoice = nextThemeChoice;
+  themeMatch = nextThemeMatch;
+  themeRandom = nextThemeRandom;
+  styleRandom = nextStyleRandom;
   gameTrack = trackForGame(track, trackRandom, Math.random);
+  gameTheme = rollTheme();
   settings = nextSettings(musicRandom ? musicRoll : undefined, difficulty === 'random' ? roll : undefined);
   saveDifficulty(difficulty);
   saveCustom(custom);
   saveMusic(music);
   saveMusicRandom(musicRandom);
   saveTrackRandom(trackRandom);
+  saveThemes(themes);
+  saveThemeChoice(themeChoice);
+  saveThemeMatch(themeMatch);
+  saveThemeRandom(themeRandom);
+  saveStyleRandom(styleRandom);
   best = loadBest(difficulty);
   state = createState(Math.random, settings);
   started = false;
@@ -144,7 +166,7 @@ createMenu({
   openBtn: difficultyBtn,
   applyBtn: document.getElementById('difficulty-apply'),
   cancelBtn: document.getElementById('difficulty-cancel'),
-  getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings }),
+  getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings, themes, themeChoice, themeMatch, themeRandom, styleRandom, gameTheme }),
   rng: Math.random,
   canOpen: () => !runInProgress(),
   onApply: applyDifficulty,
@@ -159,6 +181,7 @@ function onSoundtrackChange() {
     saveTrack(track);
     if (!trackRandom) {
       gameTrack = track;
+      if (themeMatch && !themeRandom && !styleRandom) gameTheme = rollTheme();
       if (!musicRandom) {
         const own = musicOf(music, gameTrack);
         settings = withMusic(settings, own);
