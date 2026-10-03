@@ -127,7 +127,7 @@ describe('custom settings', () => {
     const stored = JSON.parse(s.data['snake.custom']);
     expect(stored.gridSize).toBe(50);
     expect(stored).not.toHaveProperty('junk');
-    expect(Object.keys(stored)).toHaveLength(28);
+    expect(Object.keys(stored)).toHaveLength(29);
   });
   it('replaces bad fields with medium defaults and ignores junk', () => {
     const bad = fakeStorage({ 'snake.custom': JSON.stringify({ gridSize: 9999, bpmScale: 'x', growth: 2 }) });
@@ -148,6 +148,14 @@ describe('custom settings', () => {
       initialBpm: 120, finalBpm: 200, bpmScale: 1, maxLength: 200,
       ghostHalves: [60, 120, 180, 240], invisibleHalves: [200, 400, 600, 800],
     });
+  });
+  it('fills the start size with 3 for a custom saved before it existed', () => {
+    const old = fakeStorage({ 'snake.custom': JSON.stringify({ gridSize: 25, growth: 3 }) });
+    expect(loadCustom(old).startLength).toBe(3);
+  });
+  it('lowers a stored start size that no longer fits', () => {
+    const bad = fakeStorage({ 'snake.custom': JSON.stringify({ gridSize: 10, maxLength: 900, startLength: 700 }) });
+    expect(loadCustom(bad).startLength).toBe(50);
   });
   it('does not share the preset arrays with what it loads', () => {
     const loaded = loadCustom(fakeStorage());

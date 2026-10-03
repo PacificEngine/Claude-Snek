@@ -13,6 +13,7 @@ export const FIELDS = [
   f('finalBpm', 'Final BPM', 'BPM', 20, 400),
   f('bpmScale', 'BPM Scale', 'BPM', 0.1, 20, 0.1),
   f('growth', 'Growth Count', 'Growth', 0, 4, 0.1),
+  f('startLength', 'Snake Start Size', 'Growth', 3, 1000),
   f('maxLength', 'Max Snake Size', 'Growth', 3, 1000),
   f('ghostTime', 'Ghost Time', 'Ghost', 0, 40),
   list('ghostHalves', 'Ghost Time Half Trigger', 'Ghost'),
@@ -48,7 +49,7 @@ export const DEFAULT_MUSIC = Object.freeze(Object.fromEntries(SLOT_KEYS.map((key
 
 export const PRESETS = Object.freeze({
   easy: Object.freeze({
-    gridSize: 16, initialBpm: 72, finalBpm: 120, bpmScale: 0.6, growth: 0.5, maxLength: 128,
+    gridSize: 16, initialBpm: 72, finalBpm: 120, bpmScale: 0.6, growth: 0.5, startLength: 3, maxLength: 128,
     ghostTime: 36, ghostHalves: GHOST_HALVES,
     wallTrigger: 16, wallSize: 2, wallCount: 2,
     bombTrigger: 32, bombRate: 4, bombCount: 1, bombMax: 6,
@@ -57,7 +58,7 @@ export const PRESETS = Object.freeze({
     movingWallTrigger: 80, invisibleTrigger: 100, invisibleTiming: 20, invisibleHalves: INVISIBLE_HALVES,
   }),
   medium: Object.freeze({
-    gridSize: 20, initialBpm: 120, finalBpm: 200, bpmScale: 1, growth: 1, maxLength: 200,
+    gridSize: 20, initialBpm: 120, finalBpm: 200, bpmScale: 1, growth: 1, startLength: 3, maxLength: 200,
     ghostTime: 24, ghostHalves: GHOST_HALVES,
     wallTrigger: 16, wallSize: 3, wallCount: 4,
     bombTrigger: 32, bombRate: 4, bombCount: 1, bombMax: 12,
@@ -66,7 +67,7 @@ export const PRESETS = Object.freeze({
     movingWallTrigger: 80, invisibleTrigger: 100, invisibleTiming: 16, invisibleHalves: INVISIBLE_HALVES,
   }),
   hard: Object.freeze({
-    gridSize: 40, initialBpm: 144, finalBpm: 240, bpmScale: 1.2, growth: 2, maxLength: 800,
+    gridSize: 40, initialBpm: 144, finalBpm: 240, bpmScale: 1.2, growth: 2, startLength: 3, maxLength: 800,
     ghostTime: 12, ghostHalves: GHOST_HALVES,
     wallTrigger: 16, wallSize: 6, wallCount: 8,
     bombTrigger: 32, bombRate: 1, bombCount: 2, bombMax: 20,
@@ -75,7 +76,7 @@ export const PRESETS = Object.freeze({
     movingWallTrigger: 80, invisibleTrigger: 100, invisibleTiming: 8, invisibleHalves: INVISIBLE_HALVES,
   }),
   frantic: Object.freeze({
-    gridSize: 50, initialBpm: 160, finalBpm: 280, bpmScale: 1.4, growth: 2, maxLength: 1000,
+    gridSize: 50, initialBpm: 160, finalBpm: 280, bpmScale: 1.4, growth: 2, startLength: 3, maxLength: 1000,
     ghostTime: 6, ghostHalves: GHOST_HALVES,
     wallTrigger: 16, wallSize: 10, wallCount: 20,
     bombTrigger: 32, bombRate: 1, bombCount: 5, bombMax: 30,
@@ -114,12 +115,20 @@ export function clampField(field, raw) {
   return Number(bounded.toFixed(decimals(field.step)));
 }
 
+// The most cells the snake may start with: not above Max Snake Size, not above half the board.
+export const startLimit = (s) => Math.max(3, Math.min(s.maxLength, Math.floor((s.gridSize * s.gridSize) / 2)));
+
+// The cross-field rule: Snake Start Size never exceeds Max Snake Size or half the board. Returns a new object.
+export function constrain(settings) {
+  return settings.startLength > startLimit(settings) ? { ...settings, startLength: startLimit(settings) } : settings;
+}
+
 const copy = (value) => (Array.isArray(value) ? [...value] : value);
 
 // A complete, valid settings object; every bad or missing field comes from `fallback`.
 export function sanitize(input, fallback = PRESETS.medium) {
   const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
-  return Object.fromEntries(FIELDS.map((fld) => [fld.key, clampField(fld, source[fld.key]) ?? copy(fallback[fld.key])]));
+  return constrain(Object.fromEntries(FIELDS.map((fld) => [fld.key, clampField(fld, source[fld.key]) ?? copy(fallback[fld.key])])));
 }
 
 // A complete, valid music object; every bad or missing trigger takes its default.
@@ -165,6 +174,7 @@ export function randomMusic(rng) {
 export function randomSettings(rng) {
   const settings = {};
   FIELDS.forEach((field) => {
+    if (field.key === 'startLength') { settings.startLength = null; return; } // rolled below, once the grid and max size are known
     if (field.type === 'list') {
       settings[field.key] = HALF_CAPS.map((cap) => pick(rng, 1, cap));
       return;
@@ -173,6 +183,7 @@ export function randomSettings(rng) {
     const [min, max] = field.key.endsWith('Bpm') ? BPM_RANGE : [field.min, randomCap(field, cells)];
     settings[field.key] = pick(rng, min, max, field.step);
   });
+  settings.startLength = pick(rng, 3, startLimit(settings));
   return settings;
 }
 
@@ -195,7 +206,7 @@ export function settingsFor(difficulty, custom, rng) {
 
 export function applyEdit(draft, field, raw) {
   const value = clampField(field, raw);
-  return value === undefined ? draft : { ...draft, [field.key]: value };
+  return value === undefined ? draft : constrain({ ...draft, [field.key]: value });
 }
 
 export const describeRange = (field) =>

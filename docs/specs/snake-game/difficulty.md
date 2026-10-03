@@ -27,48 +27,50 @@ A difficulty menu with six choices — Easy, Medium, Hard, Frantic, Random and C
 | 3 | BPM | Final BPM | 20–400, step 1 (may be below Initial) | 120 | 200 | 240 | 280 |
 | 4 | BPM | BPM Scale | 0.1–20, step 0.1 | 0.6 | 1.0 | 1.2 | 1.4 |
 | 5 | Growth | Growth Count | 0–4, step 0.1 | 0.5 | 1 | 2 | 2 |
-| 6 | Growth | Max Snake Size | 3–1000, whole cells | 128 | 200 | 800 | 1000 |
-| 7 | Ghost | Ghost Time | 0–40, whole steps | 36 | 24 | 12 | 6 |
-| 8 | Ghost | Ghost Time Half Trigger | comma list of 1–1000 | 60, 120, 180, 240 | 60, 120, 180, 240 | 60, 120, 180, 240 | 60, 120, 180, 240 |
-| 9 | Walls | Wall Trigger | 1–1000 | 16 | 16 | 16 | 16 |
-| 10 | Walls | Wall Size | 1–10 | 2 | 3 | 6 | 10 |
-| 11 | Walls | Wall Count | 1–20 | 2 | 4 | 8 | 20 |
-| 12 | Bombs | Bomb Trigger | 1–1000 | 32 | 32 | 32 | 32 |
-| 13 | Bombs | Bomb Spawn Rate | 1–10 | 4 | 4 | 1 | 1 |
-| 14 | Bombs | Bomb Spawn Count | 1–5 | 1 | 1 | 2 | 5 |
-| 15 | Bombs | Bomb Spawn Max | 1–50 | 6 | 12 | 20 | 30 |
-| 16 | Spawning walls | Wall Spawn Trigger | 1–1000 | 48 | 48 | 48 | 48 |
-| 17 | Spawning walls | Wall Spawn Size | 1–10 | 1 | 2 | 4 | 6 |
-| 18 | Spawning walls | Wall Spawn Rate | 1–10 | 2 | 1 | 1 | 1 |
-| 19 | Spawning walls | Wall Spawn Count | 1–5 | 1 | 1 | 2 | 4 |
-| 20 | Spawning walls | Wall Spawn Max | 10–1000 cells | 40 | 80 | 200 | 1000 |
-| 21 | Enemies | Enemy Spawn Trigger | 1–1000 | 64 | 64 | 64 | 64 |
-| 22 | Enemies | Enemy Spawn Size | 1–25 | 2 | 3 | 6 | 10 |
-| 23 | Enemies | Enemy Spawn Rate | 1–10 | 5 | 5 | 5 | 3 |
-| 24 | Enemies | Enemy Spawn Max | 1–10 | 1 | 1 | 4 | 8 |
-| 25 | Effects | Moving Wall Trigger | 1–1000 | 80 | 80 | 80 | 80 |
-| 26 | Effects | Invisible Hazard Trigger | 1–1000 | 100 | 100 | 100 | 100 |
-| 27 | Effects | Invisible Hazard Timing | 1–40 steps | 20 | 16 | 8 | 8 |
-| 28 | Effects | Invisible Hazard Half Trigger | comma list of 1–1000 | 200, 400, 600, 800 | 200, 400, 600, 800 | 200, 400, 600, 800 | 200, 400, 600, 800 |
-| 29 | Music | Kick Trigger | 0–1000 | 0 | 0 | 0 | 0 |
-| 30 | Music | Bass Trigger | 0–1000 | 0 | 0 | 0 | 0 |
-| 31 | Music | Hi-Hat Trigger | 0–1000 | 8 | 8 | 8 | 8 |
-| 32 | Music | Melody Trigger | 0–1000 | 16 | 16 | 16 | 16 |
-| 33 | Music | Snare Trigger | 0–1000 | 24 | 24 | 24 | 24 |
-| 34 | Music | Fast Hi-Hat Trigger | 0–1000 | 32 | 32 | 32 | 32 |
-| 35 | Music | Arpeggio Trigger | 0–1000 | 40 | 40 | 40 | 40 |
-| 36 | Music | Bass Pulse Trigger | 0–1000 | 48 | 48 | 48 | 48 |
-| 37 | Music | Harmony Trigger | 0–1000 | 56 | 56 | 56 | 56 |
-| 38 | Music | Counter-Melody Trigger | 0–1000 | 64 | 64 | 64 | 64 |
-| 39 | Music | Drum Fill Trigger | 0–1000 | 72 | 72 | 72 | 72 |
+| 6 | Growth | Snake Start Size | 3–1000, never above Max Snake Size or half the board | 3 | 3 | 3 | 3 |
+| 7 | Growth | Max Snake Size | 3–1000, whole cells | 128 | 200 | 800 | 1000 |
+| 8 | Ghost | Ghost Time | 0–40, whole steps | 36 | 24 | 12 | 6 |
+| 9 | Ghost | Ghost Time Half Trigger | comma list of 1–1000 | 60, 120, 180, 240 | 60, 120, 180, 240 | 60, 120, 180, 240 | 60, 120, 180, 240 |
+| 10 | Walls | Wall Trigger | 1–1000 | 16 | 16 | 16 | 16 |
+| 11 | Walls | Wall Size | 1–10 | 2 | 3 | 6 | 10 |
+| 12 | Walls | Wall Count | 1–20 | 2 | 4 | 8 | 20 |
+| 13 | Bombs | Bomb Trigger | 1–1000 | 32 | 32 | 32 | 32 |
+| 14 | Bombs | Bomb Spawn Rate | 1–10 | 4 | 4 | 1 | 1 |
+| 15 | Bombs | Bomb Spawn Count | 1–5 | 1 | 1 | 2 | 5 |
+| 16 | Bombs | Bomb Spawn Max | 1–50 | 6 | 12 | 20 | 30 |
+| 17 | Spawning walls | Wall Spawn Trigger | 1–1000 | 48 | 48 | 48 | 48 |
+| 18 | Spawning walls | Wall Spawn Size | 1–10 | 1 | 2 | 4 | 6 |
+| 19 | Spawning walls | Wall Spawn Rate | 1–10 | 2 | 1 | 1 | 1 |
+| 20 | Spawning walls | Wall Spawn Count | 1–5 | 1 | 1 | 2 | 4 |
+| 21 | Spawning walls | Wall Spawn Max | 10–1000 cells | 40 | 80 | 200 | 1000 |
+| 22 | Enemies | Enemy Spawn Trigger | 1–1000 | 64 | 64 | 64 | 64 |
+| 23 | Enemies | Enemy Spawn Size | 1–25 | 2 | 3 | 6 | 10 |
+| 24 | Enemies | Enemy Spawn Rate | 1–10 | 5 | 5 | 5 | 3 |
+| 25 | Enemies | Enemy Spawn Max | 1–10 | 1 | 1 | 4 | 8 |
+| 26 | Effects | Moving Wall Trigger | 1–1000 | 80 | 80 | 80 | 80 |
+| 27 | Effects | Invisible Hazard Trigger | 1–1000 | 100 | 100 | 100 | 100 |
+| 28 | Effects | Invisible Hazard Timing | 1–40 steps | 20 | 16 | 8 | 8 |
+| 29 | Effects | Invisible Hazard Half Trigger | comma list of 1–1000 | 200, 400, 600, 800 | 200, 400, 600, 800 | 200, 400, 600, 800 | 200, 400, 600, 800 |
+| 30 | Music | Kick Trigger | 0–1000 | 0 | 0 | 0 | 0 |
+| 31 | Music | Bass Trigger | 0–1000 | 0 | 0 | 0 | 0 |
+| 32 | Music | Hi-Hat Trigger | 0–1000 | 8 | 8 | 8 | 8 |
+| 33 | Music | Melody Trigger | 0–1000 | 16 | 16 | 16 | 16 |
+| 34 | Music | Snare Trigger | 0–1000 | 24 | 24 | 24 | 24 |
+| 35 | Music | Fast Hi-Hat Trigger | 0–1000 | 32 | 32 | 32 | 32 |
+| 36 | Music | Arpeggio Trigger | 0–1000 | 40 | 40 | 40 | 40 |
+| 37 | Music | Bass Pulse Trigger | 0–1000 | 48 | 48 | 48 | 48 |
+| 38 | Music | Harmony Trigger | 0–1000 | 56 | 56 | 56 | 56 |
+| 39 | Music | Counter-Melody Trigger | 0–1000 | 64 | 64 | 64 | 64 |
+| 40 | Music | Drum Fill Trigger | 0–1000 | 72 | 72 | 72 | 72 |
 
 Every "Trigger" is an apple count: the feature starts on the apple whose count reaches that number. "Apples" always means apples eaten (the score), not the snake's length.
 
 **What each setting does**
-1. **Grid Size:** the board is Size × Size. The snake starts with 3 cells at the centre heading right. The canvas stays the same pixel size, so cells get smaller as the grid grows.
+1. **Grid Size:** the board is Size × Size. The snake starts with Snake Start Size cells (3 by default) at the centre heading right. The canvas stays the same pixel size, so cells get smaller as the grid grows.
 2–4. **BPM:** the tempo starts at *Initial BPM* and moves by *BPM Scale* for every apple eaten (not every 4th), towards *Final BPM*, where it stops: `bpm = min(Final, Initial + Scale × apples)` when Final is above Initial, and `max(Final, Initial − Scale × apples)` when Final is below it (equal values give a constant tempo). The value may be fractional. One step is still one sixteenth note, so the step rate follows the tempo. The music layers still follow the apple count, not the tempo (see 29–39).
 5. **Growth Count:** each apple eaten adds this amount to a growth carry. Whenever the carry reaches a whole number, the snake grows by that many cells and the carry drops by that amount. So 0.1 grows 1 cell every 10th apple, 0.5 grows 1 cell every 2nd apple, 1 grows 1 cell per apple, 4 grows 4 cells per apple, and 0 never grows. The new cells appear one per step as the tail stays in place. The score always goes up by exactly 1 per apple regardless of growth. The carry is computed in whole tenths so no rounding error builds up.
-6. **Max Snake Size:** the snake never grows beyond this many cells. Once it reaches the size, apples still score and still raise the tempo and the game goes on, but growth stops: pending growth and the carry are dropped and the tail moves normally. While growing, pending is never more than the room left under the max.
+6. **Snake Start Size:** how many cells the snake has at the start of a run (default 3 in every difficulty). It can never be larger than Max Snake Size, nor larger than half the board (grid size squared ÷ 2, rounded down); whenever Grid Size or Max Snake Size is edited below it, the start size is lowered to fit, and an edit above the limit is corrected to the limit. The snake starts with its head at the centre heading right; the body trails left along the head's row and, when it needs more room, continues in a zig-zag through the rows above (up along the left edge, right along the next row, and so on), so every start size up to half the board fits and the way ahead of the head stays clear. Random rolls it between 3 and that limit.
+6b. **Max Snake Size:** the snake never grows beyond this many cells. Once it reaches the size, apples still score and still raise the tempo and the game goes on, but growth stops: pending growth and the carry are dropped and the tail moves normally. While growing, pending is never more than the room left under the max.
 7–8. **Ghost:** *Ghost Time* is how many steps a new obstacle is a harmless ghost before it turns solid; 0 means solid at once. *Ghost Time Half Trigger* is a comma-separated list of apple counts. For an obstacle placed on an apple, the ghost time is halved once for every list entry that is **less than** the apple count (so with 60, an obstacle placed on apple 61 or later is halved). A value listed twice halves twice (quartering), three times is an eighth, and so on. Each halving is rounded **up** to a whole step: 36 → 18 → 9 → 5 → 3, 12 → 6 → 3 → 2 → 1. A ghost time of 0 stays 0. The list always keeps at least one entry (an empty or unreadable entry is ignored and the previous list kept). Entries are order-independent; up to 10 entries are kept.
 9–11. **Walls:** when the apple count reaches *Wall Trigger*, place *Wall Count* straight wall segments, each *Wall Size* cells long, once.
 12–15. **Bombs:** when the apple count reaches *Bomb Trigger*, bombs start. The target number of bombs is `min(Bomb Spawn Max, Bomb Spawn Count × (1 + floor((apples − Bomb Trigger) ÷ Bomb Spawn Rate)))`, so a batch of *Bomb Spawn Count* bombs is added every *Bomb Spawn Rate* apples, up to the max. Every bomb still jumps to a new spot on every apple.
@@ -109,7 +111,7 @@ All six "Trigger" fields (Wall, Bomb, Wall Spawn, Enemy Spawn, Moving Wall, Invi
 - The old single saved best score becomes Medium's best the first time the new version loads (if Medium has none yet).
 
 **The menu**
-- A "Difficulty: Medium" button in the header opens a dialog with a difficulty selector and all 39 settings, grouped under headings (Board, BPM, Growth, Ghost, Walls, Bombs, Spawning walls, Enemies, Effects, Music), each with its label and allowed range.
+- A "Difficulty: Medium" button in the header opens a dialog with a difficulty selector and all 40 settings, grouped under headings (Board, BPM, Growth, Ghost, Walls, Bombs, Spawning walls, Enemies, Effects, Music), each with its label and allowed range.
 - While Custom is selected, a **Reset to default** button (in the same place as Random's Reroll, under the note) sets every Custom value back to the Medium preset in the dialog; Apply keeps it, Cancel discards it. It is hidden and disabled for every other difficulty and never touches the Music settings.
 - The Music section is always editable and has a **Reset to default** button that restores the eleven defaults (0, 0, 8, 16 … 72) in the dialog; like the other edits it is kept when you Apply (Cancel discards it). Music values are corrected like Custom ones (whole numbers 0–1000, on leaving the field or pressing Enter). Every other field is editable in every mode: editing a value of Easy, Medium, Hard or Frantic (or of a Random roll) switches the selector to **Custom** and loads that difficulty's values into Custom with the edit applied, so nothing else changes; an edit that leaves the value unchanged (for example junk text) does not switch. The Custom values replace the previously stored Custom values once applied.
 - While Random is selected a **Reroll** button appears that draws a fresh roll of every non-Music setting to preview (it never touches Music); Apply runs exactly the roll shown and Cancel discards it. It is hidden and disabled for every other difficulty.

@@ -94,6 +94,6 @@ export function botRun(settings, seed, steps = 1500, opts) {
 
 export const PRESET_NAMES = ['easy', 'medium', 'hard', 'frantic'];
 
-// Recorded before placement was split into jobs: with no budget the results must stay exactly the same.
-export const LEGACY_SPAWN = {"easy":{"hash":381676668,"walls":29,"bombs":6,"enemies":1},"medium":{"hash":1977226436,"walls":44,"bombs":12,"enemies":1},"hard":{"hash":2480104178,"walls":58,"bombs":20,"enemies":4},"frantic":{"hash":101067326,"walls":186,"bombs":30,"enemies":8}};
-export const LEGACY_BOT = {"easy":{"hash":2248333830,"score":47},"medium":{"hash":2176380061,"score":42},"hard":{"hash":2885556858,"score":30},"frantic":{"hash":2261450603,"score":22}};
+// Recorded before placement was split into jobs, and re-recorded when enemies began to prefer going straight on: with no budget the results must stay exactly the same.
+export const LEGACY_SPAWN = {"easy":{"hash":3952567768,"walls":29,"bombs":6,"enemies":1},"medium":{"hash":1822894668,"walls":44,"bombs":12,"enemies":1},"hard":{"hash":3788957108,"walls":58,"bombs":20,"enemies":4},"frantic":{"hash":3510851810,"walls":186,"bombs":30,"enemies":8}};
+export const LEGACY_BOT = {"easy":{"hash":2127626428,"score":51},"medium":{"hash":502059749,"score":38},"hard":{"hash":2942522019,"score":35},"frantic":{"hash":3817195033,"score":19}};

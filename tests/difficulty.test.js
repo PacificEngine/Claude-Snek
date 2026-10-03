@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { TRACK_IDS } from '../src/core/track.js';
 import {
   DIFFICULTIES, FIELDS, MUSIC_FIELDS, DEFAULT_MUSIC, sanitizeMusic, withMusic, musicForGame, trackForGame, randomMusic, PRESETS, clampField, sanitize, settingsFor, applyEdit,
-  describeRange, formatList, isDifficulty, DEFAULT_DIFFICULTY, randomSettings,
+  describeRange, formatList, isDifficulty, DEFAULT_DIFFICULTY, randomSettings, constrain,
 } from '../src/core/difficulty.js';
 
 const seededRng = (seed) => {
@@ -22,7 +22,7 @@ const INVIS = [200, 400, 600, 800];
 const EXPECTED = {
   gridSize: [16, 20, 40],
   initialBpm: [72, 120, 144], finalBpm: [120, 200, 240], bpmScale: [0.6, 1, 1.2],
-  growth: [0.5, 1, 2], maxLength: [128, 200, 800],
+  growth: [0.5, 1, 2], startLength: [3, 3, 3], maxLength: [128, 200, 800],
   ghostTime: [36, 24, 12], ghostHalves: [GHOST, GHOST, GHOST],
   wallTrigger: [16, 16, 16], wallSize: [2, 3, 6], wallCount: [2, 4, 8],
   bombTrigger: [32, 32, 32], bombRate: [4, 4, 1], bombCount: [1, 1, 2], bombMax: [6, 12, 20],
@@ -35,7 +35,7 @@ const EXPECTED = {
 
 // The Frantic column of the spec table.
 const FRANTIC = {
-  gridSize: 50, initialBpm: 160, finalBpm: 280, bpmScale: 1.4, growth: 2, maxLength: 1000,
+  gridSize: 50, initialBpm: 160, finalBpm: 280, bpmScale: 1.4, growth: 2, startLength: 3, maxLength: 1000,
   ghostTime: 6, ghostHalves: GHOST,
   wallTrigger: 16, wallSize: 10, wallCount: 20,
   bombTrigger: 32, bombRate: 1, bombCount: 5, bombMax: 30,
@@ -47,7 +47,7 @@ const FRANTIC = {
 const RANGES = {
   gridSize: [10, 50, 1],
   initialBpm: [20, 400, 1], finalBpm: [20, 400, 1], bpmScale: [0.1, 20, 0.1],
-  growth: [0, 4, 0.1], maxLength: [3, 1000, 1],
+  growth: [0, 4, 0.1], startLength: [3, 1000, 1], maxLength: [3, 1000, 1],
   ghostTime: [0, 40, 1], ghostHalves: [1, 1000, 1],
   wallTrigger: [1, 1000, 1], wallSize: [1, 10, 1], wallCount: [1, 20, 1],
   bombTrigger: [1, 1000, 1], bombRate: [1, 10, 1], bombCount: [1, 5, 1], bombMax: [1, 50, 1],
@@ -63,7 +63,7 @@ const MUSIC_RANGES = Object.fromEntries(MUSIC_KEYS.map((k) => [k, [0, 1000, 1]])
 
 const GROUPS = [
   ['Board', ['gridSize']], ['BPM', ['initialBpm', 'finalBpm', 'bpmScale']],
-  ['Growth', ['growth', 'maxLength']], ['Ghost', ['ghostTime', 'ghostHalves']],
+  ['Growth', ['growth', 'startLength', 'maxLength']], ['Ghost', ['ghostTime', 'ghostHalves']],
   ['Walls', ['wallTrigger', 'wallSize', 'wallCount']],
   ['Bombs', ['bombTrigger', 'bombRate', 'bombCount', 'bombMax']],
   ['Spawning walls', ['wallSpawnTrigger', 'wallSpawnSize', 'wallSpawnRate', 'wallSpawnCount', 'wallSpawnMax']],
@@ -72,11 +72,12 @@ const GROUPS = [
 ];
 
 describe('field table', () => {
-  it('has the 28 difficulty fields in spec order: 26 numeric and 2 list', () => {
-    expect(FIELDS).toHaveLength(28);
+  it('has the 29 difficulty fields in spec order: 27 numeric and 2 list', () => {
+    expect(FIELDS).toHaveLength(29);
     expect(FIELDS.map((f) => f.key)).toEqual(Object.keys(EXPECTED));
     expect(FIELDS.filter((f) => f.type === 'list').map((f) => f.key)).toEqual(['ghostHalves', 'invisibleHalves']);
-    expect(FIELDS.filter((f) => f.type !== 'list')).toHaveLength(26);
+    expect(FIELDS.filter((f) => f.type !== 'list')).toHaveLength(27);
+    expect(FIELDS.length + MUSIC_FIELDS.length).toBe(40);
   });
   it('has every range and step from the spec', () => {
     expect(Object.fromEntries(FIELDS.map((f) => [f.key, [f.min, f.max, f.step]]))).toEqual(RANGES);
@@ -101,6 +102,7 @@ describe('field table', () => {
     expect(field('initialBpm').label).toBe('Initial BPM');
     expect(field('finalBpm').label).toBe('Final BPM');
     expect(field('bpmScale').label).toBe('BPM Scale');
+    expect(field('startLength').label).toBe('Snake Start Size');
     expect(field('maxLength').label).toBe('Max Snake Size');
     expect(field('ghostHalves').label).toBe('Ghost Time Half Trigger');
     expect(field('invisibleHalves').label).toBe('Invisible Hazard Half Trigger');
@@ -279,6 +281,54 @@ describe('music settings', () => {
     expect(merged.t0).toBe(3);
     expect(PRESETS.hard).not.toHaveProperty('t0');
     expect(music).not.toHaveProperty('gridSize');
+  });
+});
+
+describe('snake start size rule', () => {
+  const base = PRESETS.medium; // 20x20 (half the map is 200), max 200
+  it('has start size 3 in every preset', () => {
+    Object.values(PRESETS).forEach((p) => expect(p.startLength).toBe(3));
+  });
+  it('keeps a start size that fits', () => {
+    expect(constrain({ ...base, startLength: 60 }).startLength).toBe(60);
+  });
+  it('lowers a start above Max Snake Size to it', () => {
+    expect(constrain({ ...base, startLength: 150, maxLength: 100 }).startLength).toBe(100);
+  });
+  it('lowers a start above half the map to half the map (10x10 -> 50)', () => {
+    expect(constrain({ ...base, gridSize: 10, maxLength: 1000, startLength: 80 }).startLength).toBe(50);
+    expect(constrain({ ...base, gridSize: 11, maxLength: 1000, startLength: 900 }).startLength).toBe(60);
+  });
+  it('never goes below 3', () => {
+    expect(constrain({ ...base, maxLength: 3, startLength: 3 }).startLength).toBe(3);
+    expect(constrain({ ...base, startLength: 3 }).startLength).toBe(3);
+  });
+  it('does not change anything else and does not mutate its input', () => {
+    const input = { ...base, startLength: 900 };
+    const out = constrain(input);
+    expect(input.startLength).toBe(900);
+    expect({ ...out, startLength: 0 }).toEqual({ ...input, startLength: 0 });
+  });
+  it('corrects an edit of the start size above the limit to the limit', () => {
+    expect(applyEdit(base, field('startLength'), '900').startLength).toBe(200);
+    expect(applyEdit({ ...base, maxLength: 50 }, field('startLength'), 900).startLength).toBe(50);
+    expect(applyEdit(base, field('startLength'), 1).startLength).toBe(3);
+  });
+  it('lowers the start when Grid Size or Max Snake Size is edited below it', () => {
+    const big = { ...base, startLength: 80 };
+    expect(applyEdit(big, field('gridSize'), 10).startLength).toBe(50);
+    expect(applyEdit(big, field('maxLength'), 40).startLength).toBe(40);
+    expect(applyEdit(big, field('gridSize'), 30).startLength).toBe(80);
+  });
+  it('leaves an unusable edit alone', () => {
+    const big = { ...base, startLength: 80 };
+    expect(applyEdit(big, field('startLength'), 'abc')).toBe(big);
+  });
+  it('is applied by sanitize, so stored customs and loaded data are fixed', () => {
+    expect(sanitize({ gridSize: 10, maxLength: 1000, startLength: 500 }).startLength).toBe(50);
+    expect(sanitize({ maxLength: 20, startLength: 100 }).startLength).toBe(20);
+    expect(sanitize({}).startLength).toBe(3);
+    expect(settingsFor('custom', { gridSize: 10, startLength: 999 }).startLength).toBe(50);
   });
 });
 
