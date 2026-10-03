@@ -86,7 +86,19 @@ All six "Trigger" fields (Wall, Bomb, Wall Spawn, Enemy Spawn, Moving Wall, Invi
 **The Medium preset keeps today's game.** It reproduces the current rules exactly, apart from these deliberate changes: the tempo now rises by 1 BPM on every apple instead of 4 on every 4th apple, halved values round up instead of to nearest, the snake is capped at 200 cells (the old game had no cap), the ghost time halves two more times at apples 181 and 241 (24, 12, 6, 3, 2 instead of stopping at 6), the Wall Spawn Max counts spawned wall cells only (so the total can reach 92 including the first 12 cells), bombs now also fade from apple 100, and the fade takes 16 steps instead of 40.
 
 **Soundtracks (Music section)**
-- There are three soundtracks: **Classic** (the existing one), and two new ones, **Sunrise** and **Midnight**. Each is a 32-bar, 512-step loop with the same bar structure, and each has exactly **11 layers ("pieces")** in tier order. Layer *n* of every track is controlled by trigger *n*; so the eleven trigger values belong to the slot, not to an instrument.
+- There are twelve soundtracks, listed in this order everywhere (the header selector and the menu edit selector): **Classic** (the existing one) and eleven newer ones. Each is a 32-bar, 512-step loop with the same bar structure, and each has exactly **11 layers ("pieces")** in tier order. Layer *n* of every track is controlled by trigger *n*; so the eleven trigger values belong to the slot, not to an instrument.
+  - **Classic**: A minor chiptune.
+  - **Sunrise**: G major, bouncy.
+  - **Midnight**: D dorian, half-time groove.
+  - **Neon**: E minor synthwave, driving, saw bass, pulse arps, claps.
+  - **Tropic**: C major calypso, off-beat, shaker, bongos, bell, pluck.
+  - **Haunted**: C# minor, sparse, bells, toms, chromatic tension.
+  - **Parade**: F major march, snare rolls, triangle/pulse brass.
+  - **Abyss**: F lydian, ambient, sub sine, pads, pings, shaker brush.
+  - **Dune**: E phrygian dominant, hand-drum toms, saw lead, drone.
+  - **Disco**: A minor, four-on-the-floor, off-beat hats, funk 16th bass, claps.
+  - **Storm**: D minor, double-time, heavy toms, tremolo saw bass.
+  - **Lullaby**: G major, gentle music-box sine/triangle, soft kick, shaker.
 - **Which soundtrack plays** is chosen with a **soundtrack selector in the header, to the right of the Mute button** (outside the menu). It is saved at once (`snake.track`) and can be changed at any time, including during a run (the music switches at the next bar line). The keyboard must keep working: after a change the selector gives focus back so the arrow keys steer the snake again.
 - **Music settings are per soundtrack.** Each soundtrack has its own eleven trigger values; changing one track's triggers never changes another's. Every track starts from the defaults (0, 0, 8, 16 … 72) and, when migrating an older save with one shared set of triggers, every track starts with a copy of that set.
 - A dropdown at the very top of the Music section in the menu (**the edit selector**) chooses *which soundtrack's trigger settings are shown and edited*. It is purely for settings: it does not change what plays. Changing it shows that track's saved values (with the draft edits made so far in the dialog) and relabels the eleven triggers with that track's instrument names. Apply saves the triggers of every track that was edited; Cancel discards them. Reset to default and Randomize affect only the track being edited.
@@ -165,7 +177,7 @@ None beyond the parent spec. Invalid stored settings are silently replaced, not 
 ## Data Model
 - `settings`: a plain object with the numeric fields above (the eleven Music triggers are held separately and merged in) plus the two half-trigger lists (arrays of numbers), camelCase names, always complete and valid.
 - Presets: `easy`, `medium`, `hard`, `frantic` constants; `custom` is built from stored values.
-- Stored (localStorage): `snake.difficulty` (`easy|medium|hard|frantic|random|custom`), `snake.track` (`classic|sunrise|midnight`, default classic), `snake.trackRandom` (`true|false`, default off), `snake.music` (JSON object keyed by track id, each value the eleven slot triggers `t0..t10`; an older flat save is copied to every track) (previously: JSON of the eleven music triggers (slot keys; an older save using instrument names such as `kickTrigger` is read and converted)), validated field by field, defaults when missing), `snake.musicRandom` (`true` or `false`, anything else is off), `snake.custom` (JSON of the non-music fields; an old save without the new fields or with the old speed field is filled field by field from Medium), `snake.highScore.easy|medium|hard|frantic` (non-negative integers). The legacy `snake.highScore` is read once as Medium's best.
+- Stored (localStorage): `snake.difficulty` (`easy|medium|hard|frantic|random|custom`), `snake.track` (one of the twelve track ids, default classic), `snake.trackRandom` (`true|false`, default off), `snake.music` (JSON object keyed by track id, each value the eleven slot triggers `t0..t10`; an older flat save is copied to every track) (previously: JSON of the eleven music triggers (slot keys; an older save using instrument names such as `kickTrigger` is read and converted)), validated field by field, defaults when missing), `snake.musicRandom` (`true` or `false`, anything else is off), `snake.custom` (JSON of the non-music fields; an old save without the new fields or with the old speed field is filled field by field from Medium), `snake.highScore.easy|medium|hard|frantic` (non-negative integers). The legacy `snake.highScore` is read once as Medium's best.
 - The active `settings` live in the game state (`state.settings`); `state.growth` holds `{ carry, pending }` (carry in tenths; pending is cells still to grow).
 
 ## Testing Strategy

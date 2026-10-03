@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { TRACKS, TRACK_IDS, trackById, SLOT_KEYS, VOICES, TOTAL_STEPS, STEPS_PER_BAR, layersForTier } from '../src/core/track.js';
 
 // Sound cannot be unit tested, so these pin the structure every track must have to be playable and mixable.
 
 const DRUMS = ['kick', 'snare', 'hat', 'clap', 'tom', 'shaker'];
-const NEW_TRACKS = ['sunrise', 'midnight'];
 const ALL_ON = layersForTier(10);
 const NONE = Object.fromEntries(SLOT_KEYS.map((k) => [k, false]));
 const only = (key) => ({ ...NONE, [key]: true });
@@ -17,16 +17,36 @@ const barHits = (id, bar) => steps.slice(bar * STEPS_PER_BAR, (bar + 1) * STEPS_
 const MAX_SIMULTANEOUS_HITS = 8;
 const MAX_SUMMED_LEVEL = 2.6;
 
-describe('the two new soundtracks', () => {
-  it('are registered after Classic with their names', () => {
-    expect(TRACK_IDS).toEqual(['classic', 'sunrise', 'midnight']);
-    expect(trackById('sunrise').name).toBe('Sunrise');
-    expect(trackById('midnight').name).toBe('Midnight');
+describe('the soundtrack registry', () => {
+  it('lists the twelve soundtracks in order, Classic first', () => {
+    expect(TRACK_IDS).toEqual(['classic', 'sunrise', 'midnight', 'neon', 'tropic', 'haunted', 'parade', 'abyss', 'dune', 'disco', 'storm', 'lullaby']);
   });
+  it('gives every track a lowercase slug id and a unique name', () => {
+    TRACKS.forEach((t) => expect(t.id).toMatch(/^[a-z][a-z0-9-]*$/));
+    expect(new Set(TRACK_IDS).size).toBe(TRACKS.length);
+    expect(new Set(TRACKS.map((t) => t.name)).size).toBe(TRACKS.length);
+    TRACKS.forEach((t) => expect(t.name.length).toBeGreaterThan(0));
+  });
+  it('is what the header selector and the menu edit selector list (they build their options from TRACKS)', () => {
+    const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+    const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
+    expect(main).toMatch(/TRACKS\.forEach\(\(entry\) => \{[^}]*option\.value = entry\.id[^}]*option\.textContent = entry\.name/s);
+    expect(menu).toContain('TRACKS.forEach');
+    expect(menu).toContain('option.value = track.id');
+    expect(menu).toContain('option.textContent = track.name');
+    expect(TRACKS).toHaveLength(12);
+  });
+});
 
-  NEW_TRACKS.forEach((id) => {
+// Checks Classic fails by design: its layers are not independent (the old song's layers read each other) and its
+// bass and intro do not follow the layered-track shape.
+const CLASSIC_EXEMPT = ['classic'];
+const LAYERED = TRACKS.filter(({ id }) => !CLASSIC_EXEMPT.includes(id));
+
+describe('every layered soundtrack', () => {
+  LAYERED.forEach((track) => {
+    const { id } = track;
     describe(id, () => {
-      const track = trackById(id);
       it('has eleven layers t0..t10 with unique instrument names and known voices', () => {
         expect(track.layers.map((l) => l.key)).toEqual(SLOT_KEYS);
         const names = track.layers.map((l) => l.name);
@@ -70,10 +90,11 @@ describe('the two new soundtracks', () => {
         for (let bar = 0; bar < 32; bar++) roots.add(hitsOf(id, bar * STEPS_PER_BAR, only('t1')).map((h) => h.note).sort()[0]);
         expect(roots.size).toBeGreaterThan(6);
       });
-      it('enters the melody only after the intro', () => {
-        const lead = (bar) => steps.slice(bar * 16, bar * 16 + 16).flatMap((s) => hitsOf(id, s, only('t3')));
-        [0, 1, 2, 3].forEach((bar) => expect(lead(bar)).toEqual([]));
-        expect(lead(4).length).toBeGreaterThan(0);
+      it('enters the melody only after the intro: the first pitched melodic layer is silent for bars 0..3', () => {
+        // The melody slot is t3 in every layered track; it must be silent in the four intro bars and sound by bar 8.
+        const lead = (from, to) => steps.slice(from * 16, to * 16).flatMap((s) => hitsOf(id, s, only('t3')));
+        expect(lead(0, 4)).toEqual([]);
+        expect(lead(4, 8).length).toBeGreaterThan(0);
       });
     });
   });
@@ -117,7 +138,7 @@ describe('every soundtrack', () => {
     });
   });
 
-  it('are three different songs', () => {
+  it('are different songs: every pair differs with all layers on', () => {
     const song = (id) => JSON.stringify(steps.map((s) => hitsOf(id, s, ALL_ON)));
     expect(new Set(TRACK_IDS.map(song)).size).toBe(TRACK_IDS.length);
   });

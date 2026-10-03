@@ -3,6 +3,25 @@
 // `play(moment)` returns the hits of that one layer for one step and never looks at another layer.
 import { STEPS_PER_BAR, TOTAL_STEPS } from '../clock.js';
 
+// The eleven independent layers of every track, by slot (the music triggers use the same keys).
+export const LAYER_COUNT = 11;
+export const SLOT_KEYS = Array.from({ length: LAYER_COUNT }, (_, i) => `t${i}`);
+
+// [name, voice] pairs in slot order -> the frozen { key, name, voice } layers of a track.
+export const slotLayers = (layers) => Object.freeze(layers.map(([name, voice], i) => Object.freeze({ key: SLOT_KEYS[i], name, voice })));
+
+// A track of eleven independent layers: each active layer adds its own hits, so layers only ever accumulate.
+// `layers` are [name, voice, play(moment)] in slot order; `sections` are the bars (see momentOf).
+export const layeredTrack = ({ id, name, sections, layers }) => Object.freeze({
+  id,
+  name,
+  layers: slotLayers(layers),
+  eventsAt: (step, active) => {
+    const moment = momentOf(sections, step);
+    return { hits: layers.flatMap(([, , play], i) => (active[SLOT_KEYS[i]] ? play(moment) : [])) };
+  },
+});
+
 const PITCH_CLASS = { C: 0, 'C#': 1, D: 2, Eb: 3, E: 4, F: 5, 'F#': 6, G: 7, Ab: 8, A: 9, Bb: 10, B: 11 };
 const pc = (midi) => ((midi % 12) + 12) % 12;
 
