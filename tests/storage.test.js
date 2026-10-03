@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, loadMusicRandom, saveMusicRandom, loadTrack, saveTrack, loadTrackRandom, saveTrackRandom, SCORED,
 } from '../src/storage.js';
+import { TRACK_IDS } from '../src/core/track.js';
 import { PRESETS, DEFAULT_MUSIC, DEFAULT_ALL_MUSIC } from '../src/core/difficulty.js';
 
 const fakeStorage = (initial = {}) => {
@@ -255,11 +256,11 @@ describe('track choice', () => {
   });
   it('defaults to classic for nothing, junk or an unknown id', () => {
     expect(loadTrack(fakeStorage())).toBe('classic');
-    ['', 'disco', 'null', '__proto__'].forEach((raw) => expect(loadTrack(fakeStorage({ 'snake.track': raw }))).toBe('classic'));
+    ['', 'bogus', 'null', '__proto__'].forEach((raw) => expect(loadTrack(fakeStorage({ 'snake.track': raw }))).toBe('classic'));
   });
   it('does not save an unknown id', () => {
     const s = fakeStorage();
-    saveTrack('disco', s);
+    saveTrack('bogus', s);
     expect(s.data).toEqual({});
   });
   it('survives broken storage', () => {
@@ -310,15 +311,23 @@ describe('per-track music storage', () => {
     const s = fakeStorage();
     saveMusic({ ...DEFAULT_ALL_MUSIC, midnight: { ...DEFAULT_MUSIC, t4: 5 } }, s);
     const stored = JSON.parse(s.data['snake.music']);
-    expect(Object.keys(stored)).toEqual(['classic', 'sunrise', 'midnight']);
+    expect(Object.keys(stored)).toEqual(TRACK_IDS);
     expect(stored.midnight.t4).toBe(5);
     expect(stored.classic.t4).toBe(DEFAULT_MUSIC.t4);
     expect(loadMusic(s).midnight.t4).toBe(5);
   });
   it('migrates an old flat save by copying it to every track', () => {
     const loaded = loadMusic(fakeStorage({ 'snake.music': JSON.stringify(FLAT) }));
-    expect(Object.keys(loaded)).toEqual(['classic', 'sunrise', 'midnight']);
+    expect(Object.keys(loaded)).toEqual(TRACK_IDS);
     Object.values(loaded).forEach((m) => expect(m).toEqual(FLAT));
+  });
+  it('gives the defaults to every track a saved map lacks (a save from before newer soundtracks)', () => {
+    const saved = { classic: { ...DEFAULT_MUSIC, t4: 7 }, sunrise: { ...DEFAULT_MUSIC, t5: 9 }, midnight: { ...DEFAULT_MUSIC, t6: 11 } };
+    const loaded = loadMusic(fakeStorage({ 'snake.music': JSON.stringify(saved) }));
+    expect(Object.keys(loaded)).toEqual(TRACK_IDS);
+    expect(loaded.classic.t4).toBe(7);
+    expect(loaded.midnight.t6).toBe(11);
+    TRACK_IDS.slice(3).forEach((id) => expect(loaded[id]).toEqual(DEFAULT_MUSIC));
   });
   it('migrates the older instrument-named save the same way', () => {
     const loaded = loadMusic(fakeStorage({ 'snake.music': JSON.stringify(OLD) }));
