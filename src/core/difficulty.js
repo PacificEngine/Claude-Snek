@@ -173,17 +173,12 @@ export function randomSettings(rng) {
     const [min, max] = field.key.endsWith('Bpm') ? BPM_RANGE : [field.min, randomCap(field, cells)];
     settings[field.key] = pick(rng, min, max, field.step);
   });
-  // The roll carries its own music triggers; they are for that game only and never replace the player's.
-  return { ...settings, ...randomMusic(rng) };
+  return settings;
 }
 
-// What the engine runs: the player's global music with every difficulty, but a Random roll keeps its own.
-export const settingsWithMusic = (difficulty, settings, music) => (difficulty === 'random' ? { ...music, ...settings } : withMusic(settings, music));
-
-// The music one game uses: the player's saved music, or (when "Randomize every game" is on) a fresh ramp roll.
-// Random already rolls its own music, so the toggle adds nothing there. The saved object is never touched.
-export const musicForGame = (difficulty, saved, randomizeOn, rng) =>
-  (randomizeOn && difficulty !== 'random' ? randomMusic(rng) : { ...saved });
+// The music one game uses: the player's saved music, or (when "Randomize Triggers Every Game" is on) a fresh ramp roll.
+// The saved object is never touched.
+export const musicForGame = (saved, randomizeOn, rng) => (randomizeOn ? randomMusic(rng) : { ...saved });
 
 // The track one game uses: the player's pick, or (when "Randomize Track Every Game" is on) a uniform draw from the
 // registered tracks. An unknown id plays Classic. The saved pick is never touched.

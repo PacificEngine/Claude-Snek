@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TRACK_IDS } from '../src/core/track.js';
 import {
-  DIFFICULTIES, FIELDS, MUSIC_FIELDS, DEFAULT_MUSIC, sanitizeMusic, withMusic, settingsWithMusic, musicForGame, trackForGame, randomMusic, PRESETS, clampField, sanitize, settingsFor, applyEdit,
+  DIFFICULTIES, FIELDS, MUSIC_FIELDS, DEFAULT_MUSIC, sanitizeMusic, withMusic, musicForGame, trackForGame, randomMusic, PRESETS, clampField, sanitize, settingsFor, applyEdit,
   describeRange, formatList, isDifficulty, DEFAULT_DIFFICULTY, randomSettings,
 } from '../src/core/difficulty.js';
 
@@ -227,61 +227,49 @@ describe('music settings', () => {
   it('keeps 0 rather than falling back to the default', () => {
     expect(sanitizeMusic({ t10: 0 }).t10).toBe(0);
   });
-  it('is not part of sanitize or the presets (only a Random roll carries its own)', () => {
+  it('is not part of sanitize or the presets ', () => {
     expect(Object.keys(sanitize({ t0: 5 }))).toEqual(FIELDS.map((f) => f.key));
     for (const preset of Object.values(PRESETS)) MUSIC_KEYS.forEach((k) => expect(preset).not.toHaveProperty(k));
   });
   describe('musicForGame', () => {
     const saved = { ...DEFAULT_MUSIC, t4: 5 };
     it('uses the saved music (a copy) when randomizing is off', () => {
-      const got = musicForGame('hard', saved, false, seededRng(1));
+      const got = musicForGame(saved, false, seededRng(1));
       expect(got).toEqual(saved);
       expect(got).not.toBe(saved);
     });
-    it.each(['easy', 'medium', 'hard', 'frantic', 'custom'])('rolls a ramp for %s when on, equal to randomMusic with the same seed', (d) => {
-      const got = musicForGame(d, saved, true, seededRng(4));
+    it('rolls a ramp when on, equal to randomMusic with the same seed', () => {
+      const got = musicForGame(saved, true, seededRng(4));
       expect(got).toEqual(randomMusic(seededRng(4)));
       const sorted = Object.values(got).sort((a, b) => a - b);
       expect(sorted[0]).toBe(0);
       sorted.forEach((v, k) => expect(v).toBeLessThanOrEqual(10 * k));
     });
     it('differs between seeds', () => {
-      expect(musicForGame('hard', saved, true, seededRng(1))).not.toEqual(musicForGame('hard', saved, true, seededRng(2)));
+      expect(musicForGame(saved, true, seededRng(1))).not.toEqual(musicForGame(saved, true, seededRng(2)));
     });
     it('never mutates the saved music', () => {
       const frozen = JSON.stringify(saved);
-      musicForGame('hard', saved, true, seededRng(9));
-      musicForGame('hard', saved, false, seededRng(9));
+      musicForGame(saved, true, seededRng(9));
+      musicForGame(saved, false, seededRng(9));
       expect(JSON.stringify(saved)).toBe(frozen);
     });
-    it('has no extra effect under Random, which rolls its own music', () => {
-      expect(musicForGame('random', saved, true, seededRng(1))).toEqual(saved);
-    });
   });
-  describe('settingsWithMusic', () => {
+  describe('the music a difficulty runs with', () => {
     const music = { ...DEFAULT_MUSIC, t4: 5 };
     it.each(['easy', 'medium', 'hard', 'frantic'])('puts the saved music on %s', (d) => {
-      const merged = settingsWithMusic(d, PRESETS[d], music);
+      const merged = withMusic(PRESETS[d], music);
       expect(merged).toEqual({ ...PRESETS[d], ...music });
       expect(merged.t4).toBe(5);
     });
     it('puts the saved music on Custom', () => {
-      expect(settingsWithMusic('custom', sanitize({}), music).t4).toBe(5);
+      expect(withMusic(sanitize({}), music).t4).toBe(5);
     });
-    it('keeps the roll\'s own music on Random and leaves the saved music untouched', () => {
-      const roll = randomSettings(seededRng(3));
-      const frozen = JSON.stringify(music);
-      const merged = settingsWithMusic('random', roll, music);
-      expect(merged).toEqual(roll);
-      MUSIC_KEYS.forEach((k) => expect(merged[k]).toBe(roll[k]));
-      expect(JSON.stringify(music)).toBe(frozen);
-    });
-    it('restores the saved music when switching back from Random', () => {
-      settingsWithMusic('random', randomSettings(seededRng(3)), music);
-      expect(settingsWithMusic('hard', PRESETS.hard, music).t4).toBe(5);
-    });
-    it('fills any trigger a Random settings object lacks from the saved music', () => {
-      expect(settingsWithMusic('random', PRESETS.hard, music).t4).toBe(5);
+    it('puts the saved music on a Random roll, which carries none', () => {
+      const roll = settingsFor('random', null, seededRng(3));
+      const merged = withMusic(roll, music);
+      MUSIC_KEYS.forEach((k) => expect(merged[k]).toBe(music[k]));
+      expect(merged.gridSize).toBe(roll.gridSize);
     });
   });
   it('withMusic merges music over settings without mutating either', () => {

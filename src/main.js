@@ -2,7 +2,7 @@ import { createState, queueDirection, tick, togglePause } from './core/game.js';
 import { bpm, activeLayers, placementBudgetMs } from './core/pacing.js';
 import { createLayerGate } from './core/layer-gate.js';
 import { loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, loadMusicRandom, saveMusicRandom, loadTrack, saveTrack, loadTrackRandom, saveTrackRandom, SCORED } from './storage.js';
-import { settingsFor, settingsWithMusic, musicForGame, trackForGame } from './core/difficulty.js';
+import { settingsFor, withMusic, musicForGame, trackForGame } from './core/difficulty.js';
 import { createMenu, difficultyLabel } from './menu.js';
 import { actionForKey, actionForButton } from './input.js';
 import { createSynth } from './synth.js';
@@ -27,10 +27,10 @@ let musicRandom = loadMusicRandom();
 let track = loadTrack();
 let trackRandom = loadTrackRandom();
 let gameTrack = trackForGame(track, trackRandom, Math.random);
-// The settings for the next run: the difficulty's (Random re-rolls here) plus the global music triggers (a Random roll brings its own).
-// "Randomize every game" swaps in a fresh music roll for that game only; `music` (the player's own) is never replaced by it.
-const nextSettings = (gameMusic = musicForGame(difficulty, music, musicRandom, Math.random)) =>
-  settingsWithMusic(difficulty, settingsFor(difficulty, custom, Math.random), gameMusic);
+// The settings for the next run: the difficulty's (Random re-rolls here, but never the music) plus the global music triggers.
+// "Randomize Triggers Every Game" swaps in a fresh music roll for that game only; `music` (the player's own) is never replaced by it.
+const nextSettings = (gameMusic = musicForGame(music, musicRandom, Math.random), base = settingsFor(difficulty, custom, Math.random)) =>
+  withMusic(base, gameMusic);
 let settings = nextSettings();
 let best = loadBest(difficulty);
 let state = createState(Math.random, settings);
@@ -114,7 +114,7 @@ function applyDifficulty(nextDifficulty, nextCustom, roll, nextMusic, nextMusicR
   track = nextTrack;
   trackRandom = nextTrackRandom;
   gameTrack = nextTrackRoll ?? trackForGame(track, trackRandom, Math.random);
-  settings = difficulty === 'random' && roll ? settingsWithMusic('random', roll, music) : nextSettings(musicRandom ? musicRoll : undefined);
+  settings = nextSettings(musicRandom ? musicRoll : undefined, difficulty === 'random' ? roll : undefined);
   saveDifficulty(difficulty);
   saveCustom(custom);
   saveMusic(music);
