@@ -1,12 +1,36 @@
-export const STEPS_PER_BAR = 16;
-export const TOTAL_BARS = 32;
-export const TOTAL_STEPS = STEPS_PER_BAR * TOTAL_BARS;
+// Tracks: how a song is declared as data.
+//
+// A track is { id, name, layers, eventsAt }:
+//   id        short unique string, also what is saved ('classic').
+//   name      what the menu shows ('Classic').
+//   layers    exactly eleven { key, name, voice } in tier order. Layer n is controlled by music trigger n, so its key
+//             is the slot key t0..t10 (SLOT_KEYS): triggers belong to the slot, the track gives the slot an instrument.
+//   eventsAt  (step, active) -> event. `step` is a sixteenth (16 per bar, 512 per 32-bar loop: wrap it with
+//             TOTAL_STEPS yourself), `active` is { t0: bool .. t10: bool }, the layers switched on for this bar.
+//
+// An event must carry `hits`, the only thing the synth plays: [{ voice, note, length, level }]
+//   voice   one of VOICES: kick, snare, hat, clap, tom, shaker (drums), square, pulse, triangle, saw, sine (pitched).
+//   note    MIDI note number (69 = A4 = 440 Hz), required for pitched voices; null for a drum (a tom may give one for its pitch).
+//   length  how long a pitched note rings, in steps (the synth multiplies by the step's seconds). Drums ignore it.
+//   level   linear loudness of this hit, roughly 0.05 .. 1 (the master volume is applied on top).
+// An event may carry other fields for the track's own tests (Classic keeps its per-instrument fields); the synth ignores them.
+// A layer that is not active must add no hit. Add a track to TRACKS and it is available everywhere the registry is used.
 
-// The independent layers, in the order they enter by default (kick and bass first, at trigger 0).
-export const LAYERS = ['kick', 'bass', 'hat', 'melody', 'snare', 'sixteenthHat', 'arp', 'bassPulse', 'harmony', 'counter', 'fill'];
+import { STEPS_PER_BAR, TOTAL_BARS, TOTAL_STEPS } from './clock.js';
+import { momentOf } from './tracks/compose.js';
+import { SUNRISE } from './tracks/sunrise.js';
+import { MIDNIGHT } from './tracks/midnight.js';
 
-// The layers switched on at tier n: kick and bass always, then the first n of the rest (tier 0 is bass + kick only).
-export const layersForTier = (tier) => Object.fromEntries(LAYERS.map((name, i) => [name, i < 2 || tier >= i - 1]));
+export { STEPS_PER_BAR, TOTAL_BARS, TOTAL_STEPS };
+
+export const VOICES = ['kick', 'snare', 'hat', 'clap', 'tom', 'shaker', 'square', 'pulse', 'triangle', 'saw', 'sine'];
+
+// The eleven independent layers of every track, by slot (the music triggers use the same keys).
+export const LAYER_COUNT = 11;
+export const SLOT_KEYS = Array.from({ length: LAYER_COUNT }, (_, i) => `t${i}`);
+
+// The layers switched on at tier n: slots 0 and 1 always, then the first n of the rest (tier 0 is slots 0 and 1 only).
+export const layersForTier = (tier) => Object.fromEntries(SLOT_KEYS.map((key, i) => [key, i < 2 || tier >= i - 1]));
 
 // MIDI roots for the bass (one octave below the melody's home register).
 const BASS_ROOT = { Am: 45, F: 41, C: 48, G: 43, E: 40 };
@@ -73,8 +97,12 @@ function thirdAbove(midi) {
   return midi + ((up - pc + 12) % 12);
 }
 
-// `active` maps each LAYERS name to a boolean; every layer decides for itself.
-export function eventsAt(step, active) {
+const CLASSIC_LEVEL = {
+  melody: 0.3, harmony: 0.16, counter: 0.1, arp: 0.07, bass: 0.55, kick: 0.9, snare: 0.35, hat: 0.12,
+};
+
+// `active` maps each Classic instrument name to a boolean; every layer decides for itself.
+function classicEvents(step, active) {
   const s = ((step % TOTAL_STEPS) + TOTAL_STEPS) % TOTAL_STEPS;
   const bar = Math.floor(s / STEPS_PER_BAR);
   const inBar = s % STEPS_PER_BAR;
@@ -109,5 +137,60 @@ export function eventsAt(step, active) {
   const snare = Boolean((active.snare && backbeat) || (active.fill && fill));
   const hat = active.sixteenthHat ? true : Boolean(active.hat) && onEighth;
 
-  return { melody, harmony, counter, arp, bass, kick: Boolean(active.kick) && onQuarter, snare, hat };
+  const kick = Boolean(active.kick) && onQuarter;
+  const hit = (voice, note, length, level) => ({ voice, note, length, level });
+  const hits = [];
+  if (kick) hits.push(hit('kick', null, 0, CLASSIC_LEVEL.kick));
+  if (snare) hits.push(hit('snare', null, 0, CLASSIC_LEVEL.snare));
+  if (hat) hits.push(hit('hat', null, 0, CLASSIC_LEVEL.hat));
+  if (bass !== null) hits.push(hit('triangle', bass, active.bassPulse ? 1.8 : 3.6, CLASSIC_LEVEL.bass));
+  if (arp !== null) hits.push(hit('square', arp, 0.9, CLASSIC_LEVEL.arp));
+  if (melody !== null) hits.push(hit('square', melody, 1.8, CLASSIC_LEVEL.melody));
+  if (harmony !== null) hits.push(hit('square', harmony, 1.8, CLASSIC_LEVEL.harmony));
+  if (counter !== null) hits.push(hit('saw', counter, 1.8, CLASSIC_LEVEL.counter));
+
+  return { melody, harmony, counter, arp, bass, kick, snare, hat, hits };
 }
+
+// The Classic layers in slot order: [name the song reads, display name, voice].
+const CLASSIC_LAYERS = [
+  ['kick', 'Kick', 'kick'], ['bass', 'Bass', 'triangle'], ['hat', 'Hi-Hat', 'hat'], ['melody', 'Melody', 'square'],
+  ['snare', 'Snare', 'snare'], ['sixteenthHat', 'Fast Hi-Hat', 'hat'], ['arp', 'Arpeggio', 'square'],
+  ['bassPulse', 'Bass Pulse', 'triangle'], ['harmony', 'Harmony', 'square'], ['counter', 'Counter-Melody', 'saw'],
+  ['fill', 'Drum Fill', 'snare'],
+];
+
+// The song reads its layers by instrument name; the registry entry takes them by slot like every track.
+const bySong = (active) => Object.fromEntries(CLASSIC_LAYERS.map(([name], i) => [name, Boolean(active[SLOT_KEYS[i]])]));
+
+const slotLayers = (layers) => Object.freeze(layers.map(([name, voice], i) => Object.freeze({ key: SLOT_KEYS[i], name, voice })));
+
+// A track of eleven independent layers: each active layer adds its own hits, so layers only ever accumulate.
+const layeredTrack = ({ id, name, sections, layers }) => Object.freeze({
+  id,
+  name,
+  layers: slotLayers(layers),
+  eventsAt: (step, active) => {
+    const moment = momentOf(sections, step);
+    return { hits: layers.flatMap(([, , play], i) => (active[SLOT_KEYS[i]] ? play(moment) : [])) };
+  },
+});
+
+export const TRACKS = Object.freeze([
+  Object.freeze({
+    id: 'classic',
+    name: 'Classic',
+    layers: slotLayers(CLASSIC_LAYERS.map(([, name, voice]) => [name, voice])),
+    eventsAt: (step, active) => classicEvents(step, bySong(active)),
+  }),
+  layeredTrack(SUNRISE),
+  layeredTrack(MIDNIGHT),
+]);
+
+export const DEFAULT_TRACK = 'classic';
+export const TRACK_IDS = TRACKS.map((track) => track.id);
+export const trackById = (id) => TRACKS.find((track) => track.id === id) ?? TRACKS[0];
+export const layerNames = (trackId) => trackById(trackId).layers.map((layer) => layer.name);
+
+// The event for one step of the chosen track (an unknown id plays Classic).
+export const eventsAt = (step, active, trackId = DEFAULT_TRACK) => trackById(trackId).eventsAt(step, active);

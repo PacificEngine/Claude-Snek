@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { TRACK_IDS } from '../src/core/track.js';
 import {
-  DIFFICULTIES, FIELDS, MUSIC_FIELDS, DEFAULT_MUSIC, sanitizeMusic, withMusic, settingsWithMusic, musicForGame, randomMusic, PRESETS, clampField, sanitize, settingsFor, applyEdit,
+  DIFFICULTIES, FIELDS, MUSIC_FIELDS, DEFAULT_MUSIC, sanitizeMusic, withMusic, settingsWithMusic, musicForGame, trackForGame, randomMusic, PRESETS, clampField, sanitize, settingsFor, applyEdit,
   describeRange, formatList, isDifficulty, DEFAULT_DIFFICULTY, randomSettings,
 } from '../src/core/difficulty.js';
 
@@ -57,7 +58,7 @@ const RANGES = {
   invisibleHalves: [1, 1000, 1],
 };
 
-const MUSIC_KEYS = ['kickTrigger', 'bassTrigger', 'hatTrigger', 'melodyTrigger', 'snareTrigger', 'fastHatTrigger', 'arpTrigger', 'bassPulseTrigger', 'harmonyTrigger', 'counterTrigger', 'fillTrigger'];
+const MUSIC_KEYS = ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7', 't8', 't9', 't10'];
 const MUSIC_RANGES = Object.fromEntries(MUSIC_KEYS.map((k) => [k, [0, 1000, 1]]));
 
 const GROUPS = [
@@ -217,21 +218,21 @@ describe('music settings', () => {
       expect(clampField(f, 1001)).toBe(1000);
       expect(clampField(f, -5)).toBe(0);
     }
-    expect(sanitizeMusic({ fillTrigger: 1001 }).fillTrigger).toBe(1000);
+    expect(sanitizeMusic({ t10: 1001 }).t10).toBe(1000);
   });
   it('fills missing and corrupt fields with the defaults, field by field', () => {
-    expect(sanitizeMusic({ snareTrigger: 5, hatTrigger: 'loud', bogus: 1 })).toEqual({ ...DEFAULT_MUSIC, snareTrigger: 5 });
+    expect(sanitizeMusic({ t4: 5, t2: 'loud', bogus: 1 })).toEqual({ ...DEFAULT_MUSIC, t4: 5 });
     for (const bad of [null, undefined, 'x', 7, [1, 2]]) expect(sanitizeMusic(bad)).toEqual(DEFAULT_MUSIC);
   });
   it('keeps 0 rather than falling back to the default', () => {
-    expect(sanitizeMusic({ fillTrigger: 0 }).fillTrigger).toBe(0);
+    expect(sanitizeMusic({ t10: 0 }).t10).toBe(0);
   });
   it('is not part of sanitize or the presets (only a Random roll carries its own)', () => {
-    expect(Object.keys(sanitize({ kickTrigger: 5 }))).toEqual(FIELDS.map((f) => f.key));
+    expect(Object.keys(sanitize({ t0: 5 }))).toEqual(FIELDS.map((f) => f.key));
     for (const preset of Object.values(PRESETS)) MUSIC_KEYS.forEach((k) => expect(preset).not.toHaveProperty(k));
   });
   describe('musicForGame', () => {
-    const saved = { ...DEFAULT_MUSIC, snareTrigger: 5 };
+    const saved = { ...DEFAULT_MUSIC, t4: 5 };
     it('uses the saved music (a copy) when randomizing is off', () => {
       const got = musicForGame('hard', saved, false, seededRng(1));
       expect(got).toEqual(saved);
@@ -258,14 +259,14 @@ describe('music settings', () => {
     });
   });
   describe('settingsWithMusic', () => {
-    const music = { ...DEFAULT_MUSIC, snareTrigger: 5 };
+    const music = { ...DEFAULT_MUSIC, t4: 5 };
     it.each(['easy', 'medium', 'hard', 'frantic'])('puts the saved music on %s', (d) => {
       const merged = settingsWithMusic(d, PRESETS[d], music);
       expect(merged).toEqual({ ...PRESETS[d], ...music });
-      expect(merged.snareTrigger).toBe(5);
+      expect(merged.t4).toBe(5);
     });
     it('puts the saved music on Custom', () => {
-      expect(settingsWithMusic('custom', sanitize({}), music).snareTrigger).toBe(5);
+      expect(settingsWithMusic('custom', sanitize({}), music).t4).toBe(5);
     });
     it('keeps the roll\'s own music on Random and leaves the saved music untouched', () => {
       const roll = randomSettings(seededRng(3));
@@ -277,18 +278,18 @@ describe('music settings', () => {
     });
     it('restores the saved music when switching back from Random', () => {
       settingsWithMusic('random', randomSettings(seededRng(3)), music);
-      expect(settingsWithMusic('hard', PRESETS.hard, music).snareTrigger).toBe(5);
+      expect(settingsWithMusic('hard', PRESETS.hard, music).t4).toBe(5);
     });
     it('fills any trigger a Random settings object lacks from the saved music', () => {
-      expect(settingsWithMusic('random', PRESETS.hard, music).snareTrigger).toBe(5);
+      expect(settingsWithMusic('random', PRESETS.hard, music).t4).toBe(5);
     });
   });
   it('withMusic merges music over settings without mutating either', () => {
-    const music = { ...DEFAULT_MUSIC, kickTrigger: 3 };
+    const music = { ...DEFAULT_MUSIC, t0: 3 };
     const merged = withMusic(PRESETS.hard, music);
     expect(merged).toEqual({ ...PRESETS.hard, ...music });
-    expect(merged.kickTrigger).toBe(3);
-    expect(PRESETS.hard).not.toHaveProperty('kickTrigger');
+    expect(merged.t0).toBe(3);
+    expect(PRESETS.hard).not.toHaveProperty('t0');
     expect(music).not.toHaveProperty('gridSize');
   });
 });
@@ -367,5 +368,33 @@ describe('applyEdit and describeRange', () => {
     expect(describeRange(field('enemyMax'))).toBe('1–10');
     expect(describeRange(MUSIC_FIELDS[0])).toBe('0–1000');
     expect(describeRange(field('ghostHalves'))).toBe('1–1000 each, comma separated');
+  });
+});
+
+describe('slot-keyed music', () => {
+  it('names the eleven fields t0..t10 with a fallback label Layer 1..Layer 11', () => {
+    expect(MUSIC_FIELDS.map((f) => f.key)).toEqual(MUSIC_KEYS);
+    expect(MUSIC_FIELDS.map((f) => f.label)).toEqual(Array.from({ length: 11 }, (_, i) => `Layer ${i + 1}`));
+  });
+  it('defaults to 0, 0, 8, 16 ... 72 by slot', () => {
+    expect(MUSIC_KEYS.map((k) => DEFAULT_MUSIC[k])).toEqual([0, 0, 8, 16, 24, 32, 40, 48, 56, 64, 72]);
+  });
+  it('ignores the old instrument-named keys', () => {
+    expect(sanitizeMusic({ kickTrigger: 5 })).toEqual(DEFAULT_MUSIC);
+  });
+});
+
+describe('trackForGame', () => {
+  it('uses the selected track when randomize is off, whatever the rng says', () => {
+    expect(trackForGame('classic', false, () => { throw new Error('rng must not be used'); })).toBe('classic');
+  });
+  it('picks uniformly among the registered tracks when on', () => {
+    const ids = TRACK_IDS;
+    ids.forEach((id, i) => expect(trackForGame('classic', true, () => (i + 0.5) / ids.length)).toBe(id));
+    expect(trackForGame('classic', true, () => 0.999999)).toBe(ids[ids.length - 1]);
+    expect(trackForGame('classic', true, () => 0)).toBe(ids[0]);
+  });
+  it('treats an unknown selected id as Classic', () => {
+    expect(trackForGame('nope', false, Math.random)).toBe('classic');
   });
 });

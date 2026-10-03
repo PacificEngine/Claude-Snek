@@ -56,7 +56,7 @@ describe('bpm', () => {
 const medium = withMusic(PRESETS.medium, DEFAULT_MUSIC);
 
 describe('activeLayers', () => {
-  const ORDER = ['kick', 'bass', 'hat', 'melody', 'snare', 'sixteenthHat', 'arp', 'bassPulse', 'harmony', 'counter', 'fill'];
+  const ORDER = ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7', 't8', 't9', 't10'];
   // Kick and bass play from the start (trigger 0); n counts the later layers that have entered.
   const upTo = (n) => Object.fromEntries(ORDER.map((name, i) => [name, i < n + 2]));
   it('with the defaults, switches on one layer per 8 apples in the old tier order', () => {
@@ -76,34 +76,34 @@ describe('activeLayers', () => {
     expect(activeLayers(80, s)).toEqual(upTo(9));
   });
   it('reads each layer from its own trigger, in any order', () => {
-    const s = { ...medium, fillTrigger: 0, hatTrigger: 100 };
-    expect(activeLayers(0, s).fill).toBe(true);
-    expect(activeLayers(0, s).hat).toBe(false);
-    expect(activeLayers(99, s).hat).toBe(false);
-    expect(activeLayers(100, s).hat).toBe(true);
+    const s = { ...medium, t10: 0, t2: 100 };
+    expect(activeLayers(0, s).t10).toBe(true);
+    expect(activeLayers(0, s).t2).toBe(false);
+    expect(activeLayers(99, s).t2).toBe(false);
+    expect(activeLayers(100, s).t2).toBe(true);
   });
   it('reads kick and bass from their own triggers and holds them off until then', () => {
-    const s = { ...medium, kickTrigger: 4, bassTrigger: 6 };
-    expect(activeLayers(3, s)).toMatchObject({ kick: false, bass: false });
-    expect(activeLayers(4, s)).toMatchObject({ kick: true, bass: false });
-    expect(activeLayers(6, s)).toMatchObject({ kick: true, bass: true });
+    const s = { ...medium, t0: 4, t1: 6 };
+    expect(activeLayers(3, s)).toMatchObject({ t0: false, t1: false });
+    expect(activeLayers(4, s)).toMatchObject({ t0: true, t1: false });
+    expect(activeLayers(6, s)).toMatchObject({ t0: true, t1: true });
   });
-  it('maps the fast hi-hat to fastHatTrigger', () => {
-    const s = { ...medium, fastHatTrigger: 3 };
-    expect(activeLayers(2, s).sixteenthHat).toBe(false);
-    expect(activeLayers(3, s).sixteenthHat).toBe(true);
+  it('maps the fast hi-hat (slot 6) to t5', () => {
+    const s = { ...medium, t5: 3 };
+    expect(activeLayers(2, s).t5).toBe(false);
+    expect(activeLayers(3, s).t5).toBe(true);
   });
   it('treats 0 as active from the first apple and equal triggers as one moment', () => {
     const zero = Object.fromEntries(Object.keys(DEFAULT_MUSIC).map((k) => [k, 0]));
     expect(activeLayers(0, { ...medium, ...zero })).toEqual(upTo(9));
-    const same = { ...medium, hatTrigger: 5, melodyTrigger: 5 };
-    expect(activeLayers(4, same).hat).toBe(false);
-    expect(activeLayers(5, same)).toMatchObject({ hat: true, melody: true });
+    const same = { ...medium, t2: 5, t3: 5 };
+    expect(activeLayers(4, same).t2).toBe(false);
+    expect(activeLayers(5, same)).toMatchObject({ t2: true, t3: true });
   });
   it('keeps a trigger of 1000 off until apple 1000', () => {
-    const s = { ...medium, counterTrigger: 1000 };
-    expect(activeLayers(999, s).counter).toBe(false);
-    expect(activeLayers(1000, s).counter).toBe(true);
+    const s = { ...medium, t9: 1000 };
+    expect(activeLayers(999, s).t9).toBe(false);
+    expect(activeLayers(1000, s).t9).toBe(true);
   });
   it('defaults to the Medium settings', () => {
     expect(activeLayers(8)).toEqual(upTo(1));

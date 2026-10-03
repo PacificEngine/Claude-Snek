@@ -45,7 +45,7 @@ describe('randomSettings', () => {
       expect(Math.min(...seen)).toBeLessThanOrEqual(10);
       expect(Math.max(...seen)).toBeGreaterThanOrEqual(60);
     });
-    expect(new Set(rolls.map((r) => r.kickTrigger)).size).toBeGreaterThan(20);
+    expect(new Set(rolls.map((r) => r.t0)).size).toBeGreaterThan(20);
   });
   it('rolls Initial and Final BPM as whole numbers from 60 to 260', () => {
     rolls.forEach((r) => ['initialBpm', 'finalBpm'].forEach((key) => {
@@ -158,7 +158,7 @@ describe('randomMusic', () => {
   });
   it('is deterministic for a seed and shuffles which instrument is early', () => {
     expect(randomMusic(seeded(5))).toEqual(randomMusic(seeded(5)));
-    expect(new Set(musics.map((m) => m.snareTrigger)).size).toBeGreaterThan(20);
+    expect(new Set(musics.map((m) => m.t4)).size).toBeGreaterThan(20);
     expect(new Set(musics.map((m) => JSON.stringify(m))).size).toBeGreaterThan(250);
   });
   it('is the music part of a Random roll', () => {

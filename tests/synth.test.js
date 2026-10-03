@@ -29,11 +29,13 @@ function makeFakeContextClass() {
         frequency: param(),
         connect() {},
         start(t) { o.startTime = t; },
-        stop() {},
+        stop(t) { o.stopTime = t; },
+        setPeriodicWave(w) { o.wave = w; },
       };
       log.oscillators.push(o);
       return o;
     }
+    createPeriodicWave(real, imag) { return { real, imag }; }
     createBuffer(channels, length) {
       return { getChannelData: () => new Float32Array(length) };
     }
@@ -175,13 +177,13 @@ describe('layers by tier', () => {
 
   it('plays no kick before the kick layer is on, only the bass', () => {
     const { synth, log } = started();
-    synth.playStep(0, 0, 0.125, { ...layersForTier(0), kick: false });
+    synth.playStep(0, 0, 0.125, { ...layersForTier(0), t0: false });
     expect(log.oscillators.map((o) => o.type)).toEqual(['triangle']);
   });
 
   it('plays no bass before the bass layer is on, only the kick', () => {
     const { synth, log } = started();
-    synth.playStep(0, 0, 0.125, { ...layersForTier(0), bass: false });
+    synth.playStep(0, 0, 0.125, { ...layersForTier(0), t1: false });
     expect(log.oscillators.map((o) => o.type)).toEqual(['sine']);
   });
 
@@ -224,13 +226,13 @@ describe('layers by tier', () => {
 describe('independent layers', () => {
   it('plays a drum fill snare on step 60 with only the fill layer active', () => {
     const { synth, log } = started();
-    synth.playStep(60, 0.5, 0.125, { fill: true });
+    synth.playStep(60, 0.5, 0.125, { t10: true });
     expect(log.noiseStarts).toEqual([0.5]);
   });
 
   it('plays the fast hi-hat on an odd step without the hi-hat layer', () => {
     const { synth, log } = started();
-    synth.playStep(1, 0.1, 0.125, { sixteenthHat: true });
+    synth.playStep(1, 0.1, 0.125, { t5: true });
     expect(log.noiseStarts).toEqual([0.1]);
   });
 });
@@ -250,5 +252,76 @@ describe('unlock', () => {
     log.contexts[0].resume = () => { resumed += 1; return Promise.resolve(); };
     synth.unlock();
     expect(resumed).toBe(1);
+  });
+});
+
+describe('playHit: one entry point for every voice', () => {
+  const hit = (voice, note = 69, length = 0.25, level = 0.2) => {
+    const { synth, log } = started();
+    synth.playHit(voice, note, 2, length, level);
+    return log;
+  };
+  it('plays a pitched voice at its note: oscillator type, frequency, start and stop', () => {
+    const cases = [['square', 'square'], ['triangle', 'triangle'], ['saw', 'sawtooth'], ['sine', 'sine']];
+    cases.forEach(([voice, type]) => {
+      const { oscillators } = hit(voice, 69, 0.25);
+      expect(oscillators).toHaveLength(1);
+      expect(oscillators[0].type).toBe(type);
+      expect(oscillators[0].frequency.value).toBeCloseTo(440);
+      expect(oscillators[0].startTime).toBe(2);
+      expect(oscillators[0].stopTime).toBeCloseTo(2.27);
+    });
+  });
+  it('plays the pulse voice through a narrow periodic wave at the note', () => {
+    const { oscillators } = hit('pulse', 57);
+    expect(oscillators).toHaveLength(1);
+    expect(oscillators[0].frequency.value).toBeCloseTo(220);
+    expect(oscillators[0].wave).toBeDefined();
+  });
+  it('plays kick as a sine sweep and tom as a pitched sine drum', () => {
+    expect(hit('kick', null).oscillators.map((o) => o.type)).toEqual(['sine']);
+    const tom = hit('tom', 50);
+    expect(tom.oscillators.map((o) => o.type)).toEqual(['sine']);
+    expect(tom.noiseStarts).toHaveLength(0);
+  });
+  it('plays snare, hat and shaker as one noise burst each, clap as several', () => {
+    ['snare', 'hat', 'shaker'].forEach((voice) => {
+      const log = hit(voice, null);
+      expect(log.noiseStarts).toEqual([2]);
+      expect(log.oscillators).toHaveLength(0);
+    });
+    const clap = hit('clap', null);
+    expect(clap.noiseStarts.length).toBeGreaterThanOrEqual(3);
+    expect(clap.noiseStarts[0]).toBe(2);
+    expect(clap.noiseStarts.every((t, i, all) => i === 0 || t > all[i - 1])).toBe(true);
+  });
+  it('ignores an unknown voice and a pitched voice without a note', () => {
+    expect(() => hit('kazoo')).not.toThrow();
+    expect(hit('kazoo').oscillators).toHaveLength(0);
+    expect(hit('square', null).oscillators).toHaveLength(0);
+  });
+  it('does nothing before start', () => {
+    const synth = createSynth(makeFakeContextClass().FakeAudioContext);
+    expect(() => synth.playHit('kick', null, 0, 0, 0.9)).not.toThrow();
+  });
+});
+
+describe('playStep keeps the Classic sound', () => {
+  it('holds the bass for 3.6 steps, or 1.8 with the pulse layer', () => {
+    const { synth, log } = started();
+    synth.playStep(0, 1, 0.125, layersForTier(0));
+    expect(log.oscillators[1].stopTime).toBeCloseTo(1 + 0.125 * 3.6 + 0.02);
+    const second = started();
+    second.synth.playStep(0, 1, 0.125, layersForTier(7));
+    const bass = second.log.oscillators.find((o) => o.type === 'triangle');
+    expect(bass.stopTime).toBeCloseTo(1 + 0.125 * 1.8 + 0.02);
+  });
+  it('plays Classic for an unknown track id', () => {
+    const a = started();
+    a.synth.playStep(64, 0, 0.125, layersForTier(10), 'nope');
+    const b = started();
+    b.synth.playStep(64, 0, 0.125, layersForTier(10), 'classic');
+    expect(a.log.oscillators.map((o) => o.type)).toEqual(b.log.oscillators.map((o) => o.type));
+    expect(a.log.oscillators.length).toBeGreaterThan(3);
   });
 });

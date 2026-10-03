@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { FIELDS, MUSIC_FIELDS } from '../src/core/difficulty.js';
-import { difficultyLabel } from '../src/menu.js';
+import { difficultyLabel, labelsFor } from '../src/menu.js';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const buttons = [...html.matchAll(/<button\b[^>]*>/g)].map((m) => m[0]);
@@ -101,7 +101,7 @@ describe('difficulty menu markup', () => {
   it('shows the current roll for Random and hands the previewed roll to onApply', () => {
     const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
     expect(menu).toContain('current.settings');
-    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftMusic, draftMusicRandom, draftMusicRoll)');
+    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftMusic, draftMusicRandom, draftMusicRoll, draftTrack, draftTrackRandom, shownTrack())');
   });
   it('labels every difficulty in the menu', () => {
     expect(difficultyLabel('frantic')).toBe('Frantic');
@@ -163,7 +163,7 @@ describe('main.js Random wiring', () => {
     expect(apply).toContain('nextSettings(');
   });
   it('hands the menu the current settings and an rng', () => {
-    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, settings })');
+    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings })');
     expect(main).toContain('rng: Math.random');
   });
 });
@@ -209,7 +209,7 @@ describe('music settings in the menu', () => {
   it('edits a copy of the music, corrected on change, and applies it with the choice', () => {
     expect(menu).toContain('draftMusic = copySettings(current.music)');
     expect(menu).toContain('draftMusic = applyEdit(draftMusic, field, raw)');
-    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftMusic, draftMusicRandom, draftMusicRoll)');
+    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftMusic, draftMusicRandom, draftMusicRoll, draftTrack, draftTrackRandom, shownTrack())');
   });
   it('lays the reset button out inside the narrow dialog', () => {
     expect(css).toMatch(/\.music-reset[^{]*\{[^}]*min-height:\s*44px/);
@@ -221,8 +221,8 @@ describe('music settings in the menu', () => {
     expect(main).not.toMatch(/music = (?!loadMusic\(\)|nextMusic)/);
     expect(main).toContain('let musicRandom = loadMusicRandom()');
     expect(main).toContain('saveMusicRandom(musicRandom)');
-    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, settings })');
-    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, settings })');
+    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings })');
+    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings })');
     expect(main).not.toMatch(/settings = settingsFor\(/);
     expect(main).toContain('settingsWithMusic(difficulty, settingsFor(difficulty, custom, Math.random), gameMusic)');
     expect(main).toContain('musicForGame(difficulty, music, musicRandom, Math.random)');
@@ -285,18 +285,18 @@ describe('Reroll and Randomize buttons', () => {
   });
 });
 
-describe('Randomize every game toggle', () => {
+describe('Randomize Triggers Every Game toggle', () => {
   const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
   const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
   const fn = (name) => menu.slice(menu.indexOf(`function ${name}(`), menu.indexOf('\n  }\n', menu.indexOf(`function ${name}(`)));
-  it('sits at the top of the Music fieldset, right under its legend', () => {
-    expect(menu).toContain('musicEl.insertBefore(toggleLabel, musicEl.children[1])');
+  it('sits in the Music fieldset right under the track dropdown and the track toggle', () => {
+    expect(menu).toContain('legend.after(trackLabel, trackToggleLabel, toggleLabel)');
   });
   it('is a real labelled checkbox built with DOM APIs', () => {
     expect(menu).toContain("toggle.type = 'checkbox'");
     expect(menu).toContain("toggle.id = 'music-random'");
-    expect(menu).toContain("toggleText.textContent = 'Randomize every game'");
+    expect(menu).toContain("toggleText.textContent = 'Randomize Triggers Every Game'");
     expect(menu).toMatch(/toggleLabel = document\.createElement\('label'\)/);
     expect(menu).toContain('toggleLabel.append(toggle, toggleText)');
     expect(css).toMatch(/\.music-toggle[^{]*\{[^}]*min-height:\s*44px/);
@@ -310,7 +310,7 @@ describe('Randomize every game toggle', () => {
   });
   it('previews the current game\'s roll on open and hands the toggle and roll to onApply', () => {
     expect(menu).toContain('draftMusicRandom = current.musicRandom');
-    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftMusic, draftMusicRandom, draftMusicRoll)');
+    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftMusic, draftMusicRandom, draftMusicRoll, draftTrack, draftTrackRandom, shownTrack())');
   });
   it('main saves only the toggle and the player\'s own music on apply, and rolls the game music at every re-roll point', () => {
     const apply = main.slice(main.indexOf('function applyDifficulty('), main.indexOf('\n}\n', main.indexOf('function applyDifficulty(')));
@@ -326,5 +326,81 @@ describe('main.js placement budget wiring', () => {
   const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
   it('gives tick the real clock and a share of the current step as the placement budget', () => {
     expect(main).toMatch(/tick\(state, Math\.random, \{ now: \(\) => performance\.now\(\), budgetMs: placementBudgetMs\(bpm\(state\.score, state\.settings\)\) \}\)/);
+  });
+});
+
+describe('main.js track wiring', () => {
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  it('loads the saved track and its randomize toggle', () => {
+    expect(main).toContain('let track = loadTrack()');
+    expect(main).toContain('let trackRandom = loadTrackRandom()');
+  });
+  it('picks the game track with trackForGame at the start, on Apply and after game over', () => {
+    expect(main).toContain('let gameTrack = trackForGame(track, trackRandom, Math.random)');
+    expect(main).toContain('gameTrack = nextTrackRoll ?? trackForGame(track, trackRandom, Math.random)');
+    expect(main.match(/gameTrack = trackForGame\(track, trackRandom, Math\.random\)/g)).toHaveLength(2);
+  });
+  it('plays the game track and saves the choices on Apply', () => {
+    expect(main).toContain('synth.playStep(step, time, dt, layerGate.layersFor(step), gameTrack)');
+    expect(main).toContain('saveTrack(track)');
+    expect(main).toContain('saveTrackRandom(trackRandom)');
+  });
+  it('tells the menu the saved track, the toggle and the track the next game uses', () => {
+    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings })');
+  });
+});
+
+describe('labelsFor', () => {
+  it('names each of the eleven triggers after the layer of the track', () => {
+    const classic = labelsFor('classic');
+    expect(classic).toHaveLength(11);
+    expect(classic[4]).toBe('Snare Trigger');
+    expect(labelsFor('sunrise')).not.toEqual(classic);
+    expect(labelsFor('nope')).toEqual(classic);
+  });
+});
+
+describe('Track dropdown and Randomize Track Every Game', () => {
+  const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
+  const fn = (name) => menu.slice(menu.indexOf(`function ${name}(`), menu.indexOf('\n  }\n', menu.indexOf(`function ${name}(`)));
+  it('is a labelled select of the registered tracks, built with DOM APIs', () => {
+    expect(menu).toContain("trackSelect.id = 'music-track'");
+    expect(menu).toContain("trackName.textContent = 'Track'");
+    expect(menu).toContain('TRACKS.forEach');
+    expect(menu).toContain('option.value = track.id');
+    expect(menu).toContain('option.textContent = track.name');
+    expect(menu).toContain('trackLabel.append(trackName, trackSelect)');
+  });
+  it('has a Randomize Track Every Game checkbox with a real label and a 44px target', () => {
+    expect(menu).toContain("trackToggle.id = 'track-random'");
+    expect(menu).toContain("trackToggleText.textContent = 'Randomize Track Every Game'");
+    expect(menu).toContain('trackToggleLabel.append(trackToggle, trackToggleText)');
+    expect(css).toMatch(/\.music-toggle[^{]*\{[^}]*min-height:\s*44px/);
+    expect(css).toMatch(/\.track-picker select[^{]*\{[^}]*min-height:\s*44px/);
+  });
+  it('changing the track relabels the triggers but never touches the draft values', () => {
+    expect(menu).toMatch(/trackSelect\.addEventListener\('change', \(\) => \{\s*draftTrack = trackSelect\.value;\s*showTrack\(\);\s*\}\);/);
+    const show = fn('showTrack');
+    expect(show).toContain('labelsFor(shownTrack())');
+    expect(show).not.toContain('draftMusic');
+  });
+  it('shows the previewed roll, disabled, while ticked and keeps the saved pick underneath', () => {
+    const show = fn('showTrack');
+    expect(show).toContain('trackSelect.value = shownTrack()');
+    expect(show).toContain('trackSelect.disabled = draftTrackRandom');
+    expect(show).toContain('trackToggle.checked = draftTrackRandom');
+    expect(menu).toContain('const shownTrack = () => (draftTrackRandom ? draftTrackRoll : draftTrack)');
+    expect(menu).toMatch(/trackToggle\.addEventListener\('change', \(\) => \{\s*draftTrackRandom = trackToggle\.checked;\s*if \(draftTrackRandom\) draftTrackRoll = trackForGame\(draftTrack, true, rng\);\s*showTrack\(\);/);
+    const assigns = [...menu.matchAll(/draftTrack = ([^;]*);/g)].map((m) => m[1]);
+    expect(assigns).toEqual(["'classic'", 'trackSelect.value', 'current.track']);
+  });
+  it('previews the running game\'s track on open and relabels on every refresh (also when locked)', () => {
+    expect(menu).toContain('draftTrackRoll = current.trackRandom ? current.gameTrack : trackForGame(current.track, true, rng)');
+    expect(fn('refresh')).toContain('showTrack()');
+  });
+  it('labels the trigger fields from the shown track, not a hard-coded one', () => {
+    expect(menu).not.toContain('layerNames(DEFAULT_TRACK)');
+    expect(menu).toContain('musicNames.set(field.key, label.firstChild)');
   });
 });
