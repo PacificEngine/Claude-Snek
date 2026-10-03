@@ -1,5 +1,5 @@
 import { TRACKS, layerNames } from './core/track.js';
-import { DIFFICULTIES, FIELDS, MUSIC_FIELDS, DEFAULT_MUSIC, PRESETS, settingsFor, sanitize, randomMusic, trackForGame, applyEdit, describeRange, formatList } from './core/difficulty.js';
+import { DIFFICULTIES, FIELDS, MUSIC_FIELDS, DEFAULT_ALL_MUSIC, DEFAULT_MUSIC, PRESETS, settingsFor, sanitize, randomMusic, applyEdit, describeRange, formatList } from './core/difficulty.js';
 
 const LABELS = { easy: 'Easy', medium: 'Medium', hard: 'Hard', frantic: 'Frantic', random: 'Random', custom: 'Custom' };
 export const difficultyLabel = (difficulty) => LABELS[difficulty] ?? LABELS.medium;
@@ -9,32 +9,36 @@ export const labelsFor = (trackId) => layerNames(trackId).map((name) => `${name}
 
 // Builds the dialog's fields with DOM APIs (no HTML strings) and wires its buttons.
 const copySettings = (settings) => Object.fromEntries(Object.entries(settings).map(([k, v]) => [k, Array.isArray(v) ? [...v] : v]));
+const copyAllMusic = (all) => Object.fromEntries(Object.entries(all).map(([id, music]) => [id, copySettings(music)]));
 const show = (field, value) => (field.type === 'list' ? formatList(value) : String(value));
 
 export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn, cancelBtn, getCurrent, canOpen, onApply, rng }) {
   let draftDifficulty = 'medium';
   let draftCustom = copySettings(PRESETS.medium);
-  let draftMusic = copySettings(DEFAULT_MUSIC);
+  // Every track's own triggers, edited as a draft; `editTrack` is the one the Music fields show. It never changes what plays.
+  let draftAllMusic = copyAllMusic(DEFAULT_ALL_MUSIC);
+  let editTrack = 'classic';
+  let playingTrack = 'classic'; // the track the game uses: its names label the fields while the triggers roll
   let draftRoll = copySettings(PRESETS.medium);
   let draftMusicRandom = false;
   let draftMusicRoll = randomMusic(rng);
-  let draftTrack = 'classic';
   let draftTrackRandom = false;
-  let draftTrackRoll = 'classic';
   let currentRoll = null;
   const inputs = new Map();
   const musicInputs = new Map();
   const musicNames = new Map();
-  // The track the next game plays: the preview roll while randomizing, else the player's own pick (kept underneath).
-  const shownTrack = () => (draftTrackRandom ? draftTrackRoll : draftTrack);
+  // The fields are named after the edited track, or after the playing track while the triggers roll (locked).
+  const labelTrack = () => (draftMusicRandom ? playingTrack : editTrack);
   const rollFor = () => (currentRoll ? copySettings(currentRoll) : settingsFor('random', null, rng));
 
+  const groups = [];
   const addGroup = (title) => {
-    const el = document.createElement('fieldset');
-    const legend = document.createElement('legend');
-    legend.textContent = title;
-    el.append(legend);
+    const el = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.textContent = title;
+    el.append(summary);
     fieldsEl.append(el);
+    groups.push(el);
     return el;
   };
 
@@ -82,9 +86,9 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
   const musicEl = addGroup('Music');
   MUSIC_FIELDS.forEach((field, i) => {
     // The slot's label is the name of the instrument playing it in the shown track (showTrack keeps it current).
-    const { label, input } = buildField({ ...field, label: labelsFor(shownTrack())[i] }, (raw) => {
-      draftMusic = applyEdit(draftMusic, field, raw);
-      input.value = show(field, draftMusic[field.key]);
+    const { label, input } = buildField({ ...field, label: labelsFor(labelTrack())[i] }, (raw) => {
+      draftAllMusic[editTrack] = applyEdit(draftAllMusic[editTrack], field, raw);
+      input.value = show(field, draftAllMusic[editTrack][field.key]);
     });
     musicEl.append(label);
     musicInputs.set(field.key, input);
@@ -96,7 +100,7 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
   resetBtn.textContent = 'Reset to default';
   resetBtn.setAttribute('aria-label', 'Reset to default, music');
   resetBtn.addEventListener('click', () => {
-    draftMusic = copySettings(DEFAULT_MUSIC);
+    draftAllMusic[editTrack] = copySettings(DEFAULT_MUSIC);
     showMusic();
   });
   const randomizeBtn = document.createElement('button');
@@ -105,7 +109,7 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
   randomizeBtn.textContent = 'Randomize';
   randomizeBtn.setAttribute('aria-label', 'Randomize, music');
   randomizeBtn.addEventListener('click', () => {
-    draftMusic = randomMusic(rng);
+    draftAllMusic[editTrack] = randomMusic(rng);
     showMusic();
   });
   musicEl.append(randomizeBtn, resetBtn);
@@ -123,13 +127,14 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
     draftMusicRandom = toggle.checked;
     if (draftMusicRandom) draftMusicRoll = randomMusic(rng);
     showMusic();
+    showTrack();
   });
 
-  // The track dropdown and "Randomize Track Every Game": while ticked the dropdown is locked on the track the next game uses.
+  // The edit selector (settings only: which track's triggers the Music fields show) and "Randomize Track Every Game".
   const trackLabel = document.createElement('label');
   trackLabel.className = 'field track-picker';
   const trackName = document.createElement('span');
-  trackName.textContent = 'Track';
+  trackName.textContent = 'Soundtrack to edit';
   const trackSelect = document.createElement('select');
   trackSelect.id = 'music-track';
   TRACKS.forEach((track) => {
@@ -140,7 +145,8 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
   });
   trackLabel.append(trackName, trackSelect);
   trackSelect.addEventListener('change', () => {
-    draftTrack = trackSelect.value;
+    editTrack = trackSelect.value;
+    showMusic();
     showTrack();
   });
   const trackToggleLabel = document.createElement('label');
@@ -153,11 +159,9 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
   trackToggleLabel.append(trackToggle, trackToggleText);
   trackToggle.addEventListener('change', () => {
     draftTrackRandom = trackToggle.checked;
-    if (draftTrackRandom) draftTrackRoll = trackForGame(draftTrack, true, rng);
-    showTrack();
   });
-  const legend = musicEl.firstChild;
-  legend.after(trackLabel, trackToggleLabel, toggleLabel); // right under the legend, above the fields
+  const summary = musicEl.firstChild;
+  summary.after(trackLabel, trackToggleLabel, toggleLabel); // right under the legend, above the fields
 
   // Random only: draws a fresh roll of the non-music settings to preview; Apply runs exactly what is shown.
   const rerollBtn = document.createElement('button');
@@ -183,14 +187,14 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
   });
   noteEl.after(resetCustomBtn);
 
-  // Only labels change with the track; the trigger values belong to the slot and are never touched here.
+  // Only labels change with the track; the values are shown by showMusic.
   function showTrack() {
-    const names = labelsFor(shownTrack());
+    const names = labelsFor(labelTrack());
     MUSIC_FIELDS.forEach((field, i) => {
       musicNames.get(field.key).textContent = `${names[i]} (${describeRange(field)})`;
     });
-    trackSelect.value = shownTrack();
-    trackSelect.disabled = draftTrackRandom;
+    trackSelect.value = labelTrack();
+    trackSelect.disabled = draftMusicRandom;
     trackToggle.checked = draftTrackRandom;
   }
 
@@ -199,7 +203,7 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
     const locked = draftMusicRandom;
     MUSIC_FIELDS.forEach((field) => {
       const input = musicInputs.get(field.key);
-      const value = draftMusicRandom ? draftMusicRoll[field.key] : draftMusic[field.key];
+      const value = draftMusicRandom ? draftMusicRoll[field.key] : draftAllMusic[editTrack][field.key];
       input.value = show(field, value);
       input.readOnly = locked;
       input.setAttribute('aria-readonly', String(locked));
@@ -236,11 +240,11 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
     const current = getCurrent();
     draftDifficulty = current.difficulty;
     draftCustom = copySettings(current.custom);
-    draftMusic = copySettings(current.music);
+    draftAllMusic = copyAllMusic(current.music);
+    editTrack = current.gameTrack;
+    playingTrack = current.gameTrack;
     draftMusicRandom = current.musicRandom;
-    draftTrack = current.track;
     draftTrackRandom = current.trackRandom;
-    draftTrackRoll = current.trackRandom ? current.gameTrack : trackForGame(current.track, true, rng);
     // When already on, the game's own roll is the preview; otherwise a roll is ready if the toggle gets ticked.
     draftMusicRoll = current.musicRandom
       ? Object.fromEntries(MUSIC_FIELDS.map((f) => [f.key, current.settings[f.key]]))
@@ -249,11 +253,12 @@ export function createMenu({ dialog, select, fieldsEl, noteEl, openBtn, applyBtn
     currentRoll = current.difficulty === 'random' ? current.settings : null;
     draftRoll = rollFor();
     select.value = draftDifficulty;
+    groups.forEach((group) => { group.open = false; });
     refresh();
     dialog.showModal();
   });
   applyBtn.addEventListener('click', () => {
-    onApply(draftDifficulty, draftCustom, draftRoll, draftMusic, draftMusicRandom, draftMusicRoll, draftTrack, draftTrackRandom, shownTrack());
+    onApply(draftDifficulty, draftCustom, draftRoll, draftAllMusic, draftMusicRandom, draftMusicRoll, draftTrackRandom);
     dialog.close();
   });
   cancelBtn.addEventListener('click', () => dialog.close());

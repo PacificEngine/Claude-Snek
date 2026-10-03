@@ -2,9 +2,10 @@ import { createState, queueDirection, tick, togglePause } from './core/game.js';
 import { bpm, activeLayers, placementBudgetMs } from './core/pacing.js';
 import { createLayerGate } from './core/layer-gate.js';
 import { loadBest, saveBest, loadDifficulty, saveDifficulty, loadCustom, saveCustom, loadMusic, saveMusic, loadMusicRandom, saveMusicRandom, loadTrack, saveTrack, loadTrackRandom, saveTrackRandom, SCORED } from './storage.js';
-import { settingsFor, withMusic, musicForGame, trackForGame } from './core/difficulty.js';
+import { settingsFor, withMusic, musicForGame, musicOf, trackForGame, trackSelectState } from './core/difficulty.js';
 import { createMenu, difficultyLabel } from './menu.js';
 import { actionForKey, actionForButton } from './input.js';
+import { TRACKS } from './core/track.js';
 import { createSynth } from './synth.js';
 import { createConductor } from './conductor.js';
 import { render } from './renderer.js';
@@ -17,6 +18,13 @@ const messageEl = document.getElementById('message');
 const muteBtn = document.getElementById('mute');
 const bestWrap = document.getElementById('best-wrap');
 const difficultyBtn = document.getElementById('difficulty-open');
+const soundtrackSelect = document.getElementById('soundtrack-select');
+TRACKS.forEach((entry) => {
+  const option = document.createElement('option');
+  option.value = entry.id;
+  option.textContent = entry.name;
+  soundtrackSelect.append(option);
+});
 
 const synth = createSynth();
 let difficulty = loadDifficulty();
@@ -29,7 +37,7 @@ let trackRandom = loadTrackRandom();
 let gameTrack = trackForGame(track, trackRandom, Math.random);
 // The settings for the next run: the difficulty's (Random re-rolls here, but never the music) plus the global music triggers.
 // "Randomize Triggers Every Game" swaps in a fresh music roll for that game only; `music` (the player's own) is never replaced by it.
-const nextSettings = (gameMusic = musicForGame(music, musicRandom, Math.random), base = settingsFor(difficulty, custom, Math.random)) =>
+const nextSettings = (gameMusic = musicForGame(musicOf(music, gameTrack), musicRandom, Math.random), base = settingsFor(difficulty, custom, Math.random)) =>
   withMusic(base, gameMusic);
 let settings = nextSettings();
 let best = loadBest(difficulty);
@@ -62,6 +70,9 @@ function updateHud() {
   difficultyBtn.setAttribute('aria-label', `Difficulty: ${difficultyLabel(difficulty)}, choose difficulty`);
   difficultyBtn.disabled = runInProgress();
   muteBtn.setAttribute('aria-pressed', String(synth.isMuted()));
+  const shown = trackSelectState({ trackRandom, track, gameTrack });
+  soundtrackSelect.value = shown.value;
+  soundtrackSelect.disabled = shown.disabled;
   if (state.status === 'gameOver') messageEl.textContent = 'Game over — press Enter or tap Restart';
   else if (state.status === 'paused') messageEl.textContent = 'Paused — press P or tap Pause to resume';
   else messageEl.textContent = started ? '' : 'Press an arrow key or WASD, or tap a direction, to start';
@@ -104,22 +115,20 @@ function restart() {
 }
 
 // `roll` is the Random roll the dialog previewed, so what was shown is what runs.
-// `nextTrackRoll` is the track the dialog previewed for the next game (used as is, like the music roll).
-function applyDifficulty(nextDifficulty, nextCustom, roll, nextMusic, nextMusicRandom, musicRoll, nextTrack = track, nextTrackRandom = trackRandom, nextTrackRoll) {
+// The saved track is not a menu setting (the header selector owns it); Apply only re-rolls the game track from it.
+function applyDifficulty(nextDifficulty, nextCustom, roll, nextMusic, nextMusicRandom, musicRoll, nextTrackRandom = trackRandom) {
   stopBeat();
   difficulty = nextDifficulty;
   custom = nextCustom;
   music = nextMusic;
   musicRandom = nextMusicRandom;
-  track = nextTrack;
   trackRandom = nextTrackRandom;
-  gameTrack = nextTrackRoll ?? trackForGame(track, trackRandom, Math.random);
+  gameTrack = trackForGame(track, trackRandom, Math.random);
   settings = nextSettings(musicRandom ? musicRoll : undefined, difficulty === 'random' ? roll : undefined);
   saveDifficulty(difficulty);
   saveCustom(custom);
   saveMusic(music);
   saveMusicRandom(musicRandom);
-  saveTrack(track);
   saveTrackRandom(trackRandom);
   best = loadBest(difficulty);
   state = createState(Math.random, settings);
@@ -140,6 +149,27 @@ createMenu({
   canOpen: () => !runInProgress(),
   onApply: applyDifficulty,
 });
+
+// The header selector picks the soundtrack at any time. The music switches at the next bar line (the layer gate and playStep read
+// gameTrack and the triggers as they go); the triggers follow the track unless they are rolled per game.
+function onSoundtrackChange() {
+  const picked = soundtrackSelect.value;
+  if (TRACKS.some((entry) => entry.id === picked)) {
+    track = picked;
+    saveTrack(track);
+    if (!trackRandom) {
+      gameTrack = track;
+      if (!musicRandom) {
+        const own = musicOf(music, gameTrack);
+        settings = withMusic(settings, own);
+        state = { ...state, settings: withMusic(state.settings, own) };
+      }
+    }
+  }
+  draw();
+  soundtrackSelect.blur();
+}
+soundtrackSelect.addEventListener('change', onSoundtrackChange);
 
 function toggleMute() {
   synth.setMuted(!synth.isMuted());
@@ -172,6 +202,8 @@ document.addEventListener('keydown', (event) => {
   if (typeof event.key !== 'string') return;
   if (document.querySelector('dialog[open]')) return;
   if (event.ctrlKey || event.metaKey || event.altKey) return;
+  // A focused select or input keeps its own keys (arrows, space, Enter).
+  if (event.target.closest?.('select, input, textarea')) return;
   // Enter on a focused control must press it, not restart the game.
   if (event.key === 'Enter' && event.target.closest?.('button, select, input')) return;
   const action = actionForKey(event.key);
