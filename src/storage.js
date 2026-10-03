@@ -1,4 +1,5 @@
 import { TRACK_IDS, DEFAULT_TRACK } from './core/track.js';
+import { sanitizeThemes, DEFAULT_THEME_ID } from './core/theme.js';
 import { DEFAULT_DIFFICULTY, isDifficulty, sanitize, sanitizeAllMusic } from './core/difficulty.js';
 
 export const SCORED = ['easy', 'medium', 'hard', 'frantic'];
@@ -10,6 +11,11 @@ const MUSIC_KEY = 'snake.music';
 const MUSIC_RANDOM_KEY = 'snake.musicRandom';
 const TRACK_KEY = 'snake.track';
 const TRACK_RANDOM_KEY = 'snake.trackRandom';
+const THEMES_KEY = 'snake.themes';
+const THEME_CHOICE_KEY = 'snake.themeChoice';
+const THEME_MATCH_KEY = 'snake.themeMatch';
+const THEME_RANDOM_KEY = 'snake.themeRandom';
+const STYLE_RANDOM_KEY = 'snake.styleRandom';
 
 // Resolve storage inside the try: reading localStorage itself can throw when it is blocked.
 function guarded(action, fallback, message) {
@@ -124,4 +130,62 @@ export function loadTrackRandom(storage) {
 export function saveTrackRandom(on, storage) {
   if (typeof on !== 'boolean') return;
   guarded(() => store(storage)?.setItem(TRACK_RANDOM_KEY, String(on)), undefined, 'Could not save track randomize setting');
+}
+
+// Every theme, each checked field by field; missing or corrupt ones are that theme's built-in default.
+export function loadThemes(storage) {
+  return guarded(() => {
+    const raw = store(storage)?.getItem(THEMES_KEY);
+    if (!raw) return sanitizeThemes({});
+    try {
+      return sanitizeThemes(JSON.parse(raw));
+    } catch {
+      return sanitizeThemes({});
+    }
+  }, sanitizeThemes({}), 'Could not read themes');
+}
+
+export function saveThemes(themes, storage) {
+  guarded(() => store(storage)?.setItem(THEMES_KEY, JSON.stringify(sanitizeThemes(themes))), undefined, 'Could not save themes');
+}
+
+// The theme chosen for editing and for play when Match is off: only a known theme id is believed.
+export function loadThemeChoice(storage) {
+  return guarded(() => {
+    const value = store(storage)?.getItem(THEME_CHOICE_KEY);
+    return TRACK_IDS.includes(value) ? value : DEFAULT_THEME_ID;
+  }, DEFAULT_THEME_ID, 'Could not read theme choice');
+}
+
+export function saveThemeChoice(id, storage) {
+  if (!TRACK_IDS.includes(id)) return;
+  guarded(() => store(storage)?.setItem(THEME_CHOICE_KEY, id), undefined, 'Could not save theme choice');
+}
+
+// "Match Theme with Soundtrack": on unless it was saved as exactly 'false'.
+export function loadThemeMatch(storage) {
+  return guarded(() => store(storage)?.getItem(THEME_MATCH_KEY) !== 'false', true, 'Could not read theme match setting');
+}
+
+export function saveThemeMatch(on, storage) {
+  if (typeof on !== 'boolean') return;
+  guarded(() => store(storage)?.setItem(THEME_MATCH_KEY, String(on)), undefined, 'Could not save theme match setting');
+}
+
+export function loadThemeRandom(storage) {
+  return guarded(() => store(storage)?.getItem(THEME_RANDOM_KEY) === 'true', false, 'Could not read theme randomize setting');
+}
+
+export function saveThemeRandom(on, storage) {
+  if (typeof on !== 'boolean') return;
+  guarded(() => store(storage)?.setItem(THEME_RANDOM_KEY, String(on)), undefined, 'Could not save theme randomize setting');
+}
+
+export function loadStyleRandom(storage) {
+  return guarded(() => store(storage)?.getItem(STYLE_RANDOM_KEY) === 'true', false, 'Could not read style randomize setting');
+}
+
+export function saveStyleRandom(on, storage) {
+  if (typeof on !== 'boolean') return;
+  guarded(() => store(storage)?.setItem(STYLE_RANDOM_KEY, String(on)), undefined, 'Could not save style randomize setting');
 }

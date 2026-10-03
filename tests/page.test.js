@@ -101,7 +101,7 @@ describe('difficulty menu markup', () => {
   it('shows the current roll for Random and hands the previewed roll to onApply', () => {
     const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
     expect(menu).toContain('current.settings');
-    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftAllMusic, draftMusicRandom, draftMusicRoll, draftTrackRandom)');
+    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftAllMusic, draftMusicRandom, draftMusicRoll, draftTrackRandom, draftThemes, draftThemeChoice, draftThemeMatch, draftThemeRandom, draftStyleRandom)');
   });
   it('labels every difficulty in the menu', () => {
     expect(difficultyLabel('frantic')).toBe('Frantic');
@@ -163,7 +163,7 @@ describe('main.js Random wiring', () => {
     expect(apply).toContain('nextSettings(');
   });
   it('hands the menu the current settings and an rng', () => {
-    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings })');
+    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings, themes, themeChoice, themeMatch, themeRandom, styleRandom, gameTheme })');
     expect(main).toContain('rng: Math.random');
   });
 });
@@ -210,7 +210,7 @@ describe('music settings in the menu', () => {
   it('edits a copy of the music, corrected on change, and applies it with the choice', () => {
     expect(menu).toContain('draftAllMusic = copyAllMusic(current.music)');
     expect(menu).toContain('draftAllMusic[editTrack] = applyEdit(draftAllMusic[editTrack], field, raw)');
-    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftAllMusic, draftMusicRandom, draftMusicRoll, draftTrackRandom)');
+    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftAllMusic, draftMusicRandom, draftMusicRoll, draftTrackRandom, draftThemes, draftThemeChoice, draftThemeMatch, draftThemeRandom, draftStyleRandom)');
   });
   it('lays the reset button out inside the narrow dialog', () => {
     expect(css).toMatch(/\.music-reset[^{]*\{[^}]*min-height:\s*44px/);
@@ -222,8 +222,8 @@ describe('music settings in the menu', () => {
     expect(main).not.toMatch(/music = (?!loadMusic\(\)|nextMusic)/);
     expect(main).toContain('let musicRandom = loadMusicRandom()');
     expect(main).toContain('saveMusicRandom(musicRandom)');
-    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings })');
-    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings })');
+    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings, themes, themeChoice, themeMatch, themeRandom, styleRandom, gameTheme })');
+    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings, themes, themeChoice, themeMatch, themeRandom, styleRandom, gameTheme })');
     expect(main).not.toMatch(/settings = settingsFor\(/);
     expect(main).toContain('withMusic(base, gameMusic)');
     expect(main).not.toContain('settingsWithMusic');
@@ -315,7 +315,7 @@ describe('Randomize Triggers Every Game toggle', () => {
   });
   it('previews the current game\'s roll on open and hands the toggle and roll to onApply', () => {
     expect(menu).toContain('draftMusicRandom = current.musicRandom');
-    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftAllMusic, draftMusicRandom, draftMusicRoll, draftTrackRandom)');
+    expect(menu).toContain('onApply(draftDifficulty, draftCustom, draftRoll, draftAllMusic, draftMusicRandom, draftMusicRoll, draftTrackRandom, draftThemes, draftThemeChoice, draftThemeMatch, draftThemeRandom, draftStyleRandom)');
   });
   it('main saves only the toggle and the player\'s own music on apply, and rolls the game music at every re-roll point', () => {
     const apply = main.slice(main.indexOf('function applyDifficulty('), main.indexOf('\n}\n', main.indexOf('function applyDifficulty(')));
@@ -357,7 +357,7 @@ describe('main.js track wiring', () => {
     expect(apply).toContain('saveMusic(music)');
   });
   it('tells the menu the saved track, the toggle and the track the next game uses', () => {
-    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings })');
+    expect(main).toContain('getCurrent: () => ({ difficulty, custom, music, musicRandom, track, trackRandom, gameTrack, settings, themes, themeChoice, themeMatch, themeRandom, styleRandom, gameTheme })');
   });
 });
 
@@ -442,5 +442,114 @@ describe('collapsible groups', () => {
     expect(css).toMatch(/summary[^{]*\{[^}]*min-height:\s*44px/);
     expect(css).toMatch(/summary::before[^{]*\{[^}]*content:/);
     expect(css).toMatch(/details\[open\] > summary::before[^{]*\{[^}]*content:/);
+  });
+});
+
+describe('main.js theme wiring', () => {
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const body = (name) => main.slice(main.indexOf(`function ${name}(`), main.indexOf('\n}\n', main.indexOf(`function ${name}(`)));
+  it('loads the themes and the toggles from storage', () => {
+    expect(main).toContain('let themes = loadThemes()');
+    expect(main).toContain('let themeChoice = loadThemeChoice()');
+    expect(main).toContain('let themeMatch = loadThemeMatch()');
+    expect(main).toContain('let themeRandom = loadThemeRandom()');
+    expect(main).toContain('let styleRandom = loadStyleRandom()');
+  });
+  it('decides the game theme through themeForGame with the game track and Math.random', () => {
+    expect(main).toContain('themeForGame({ themes, themeChoice, match: themeMatch, themeRandom, styleRandom, track: gameTrack }, Math.random)');
+    expect(main).toContain('let gameTheme = rollTheme()');
+  });
+  it('re-rolls the theme wherever the game track is decided: game over and apply', () => {
+    expect(body('advance')).toMatch(/gameTrack = trackForGame\([^)]*\);\s*gameTheme = rollTheme\(\)/);
+    expect(body('applyDifficulty')).toMatch(/gameTrack = trackForGame\([^)]*\);\s*gameTheme = rollTheme\(\)/);
+  });
+  it('switches the theme with the header soundtrack only when Match is on and neither randomize flag is set', () => {
+    const change = body('onSoundtrackChange');
+    expect(change).toContain('if (themeMatch && !themeRandom && !styleRandom) gameTheme = rollTheme()');
+    expect(change.indexOf('gameTrack = track')).toBeLessThan(change.indexOf('gameTheme = rollTheme()'));
+    expect(change.indexOf('gameTheme = rollTheme()')).toBeLessThan(change.indexOf('draw()'));
+  });
+  it('draws with the game theme and the reduced-motion preference', () => {
+    expect(body('draw')).toContain('render(ctx, state, { theme: gameTheme, reducedMotion: reducedMotionQuery.matches })');
+  });
+  it('takes the themes and toggles as the last arguments of the apply callback, defaulting to the current ones', () => {
+    expect(main).toContain('nextTrackRandom = trackRandom, nextThemes = themes, nextThemeChoice = themeChoice, nextThemeMatch = themeMatch, nextThemeRandom = themeRandom, nextStyleRandom = styleRandom)');
+  });
+  it('saves the sanitized themes and the toggles on apply, and never the game theme', () => {
+    const apply = body('applyDifficulty');
+    expect(apply).toContain('themes = sanitizeThemes(nextThemes)');
+    ['saveThemes(themes)', 'saveThemeChoice(themeChoice)', 'saveThemeMatch(themeMatch)', 'saveThemeRandom(themeRandom)', 'saveStyleRandom(styleRandom)'].forEach((call) => expect(apply).toContain(call));
+    expect(main).not.toMatch(/save\w*\([^)]*gameTheme/);
+  });
+});
+
+describe('Theme group in the menu', () => {
+  const menu = readFileSync(new URL('../src/menu.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
+  const fn = (name) => menu.slice(menu.indexOf(`function ${name}(`), menu.indexOf('\n  }\n', menu.indexOf(`function ${name}(`)));
+  it('is a collapsible group right below Music, collapsed on open', () => {
+    expect(menu.indexOf("addGroup('Theme')")).toBeGreaterThan(menu.indexOf("addGroup('Music')"));
+    expect(menu).toContain('groups.forEach((group) => { group.open = false; })');
+    const added = [...menu.matchAll(/addGroup\(('[^']+'|[a-z.]+)\)/g)].map((m) => m[1]);
+    expect(added.slice(-2)).toEqual(["'Music'", "'Theme'"]);
+  });
+  it('has a labelled Theme to Edit select with the twelve themes, and a note element', () => {
+    expect(menu).toContain("'Theme to Edit'");
+    expect(menu).toContain("themeSelect.id = 'theme-edit'");
+    expect(menu).toContain("'Style is randomized every game.'");
+  });
+  it('has the three toggles in order with their ids and labels', () => {
+    const at = (text) => menu.indexOf(text);
+    expect(at("'Match Theme with Soundtrack'")).toBeGreaterThan(-1);
+    expect(at("'Match Theme with Soundtrack'")).toBeLessThan(at("'Randomize Theme on Every Game'"));
+    expect(at("'Randomize Theme on Every Game'")).toBeLessThan(at("'Randomize Style on Every Game'"));
+    ['theme-match', 'theme-random', 'style-random'].forEach((id) => expect(menu).toContain(`'${id}'`));
+    expect(css).toMatch(/\.music-toggle[^{]*\{[^}]*min-height:\s*44px/);
+  });
+  it('builds colour (picker + hex text, validated) and shape (select) fields from THEME_FIELDS', () => {
+    expect(menu).toContain('THEME_FIELDS.forEach');
+    expect(menu).toContain("type = 'color'");
+    expect(menu).toContain('normalizeHex(');
+    expect(menu).toContain('SHAPES.forEach');
+    expect(menu).toContain('shapeLabel(shape)');
+    expect(menu).toContain('draftThemes[draftThemeEdit].colors[field.key]');
+    expect(menu).toContain('draftThemes[draftThemeEdit].shapes[field.key]');
+  });
+  it('previews with the real renderer on a labelled canvas, redrawn by showTheme', () => {
+    expect(menu).toContain("import { render } from './renderer.js'");
+    expect(menu).toContain("setAttribute('aria-label', 'Theme preview')");
+    expect(menu).toContain("setAttribute('role', 'img')");
+    expect(fn('showTheme')).toContain('render(previewCtx, previewState(), { theme: draftThemes[draftThemeEdit] })');
+  });
+  it('randomizes and resets only the edited theme in the draft', () => {
+    expect(menu).toContain("'Randomize, theme'");
+    expect(menu).toContain("'Reset to default, theme'");
+    expect(menu).toMatch(/draftThemes\[draftThemeEdit\] = \{ \.\.\.randomStyle\(rng\), name: draftThemes\[draftThemeEdit\]\.name \};/);
+    expect(menu).toMatch(/draftThemes\[draftThemeEdit\] = copyTheme\(DEFAULT_THEMES\[draftThemeEdit\]\);/);
+    expect(menu).toContain("themeResetBtn.type = 'button'");
+    expect(menu).toContain("themeRandomizeBtn.type = 'button'");
+    expect(css).toMatch(/\.theme-randomize[^{]*\{[^}]*min-height:\s*44px/);
+  });
+  it('locks the fields, selector and both buttons while Randomize Style is on, keeping the draft', () => {
+    const body = fn('showTheme');
+    expect(body).toContain('const locked = draftStyleRandom');
+    ['themeSelect.disabled = locked', 'themeRandomizeBtn.disabled = locked', 'themeResetBtn.disabled = locked', 'input.disabled = locked'].forEach((s) => expect(body).toContain(s));
+    expect(body).not.toMatch(/draftThemes\[[^\]]*\] =/);
+  });
+  it('the selector writes the choice to be saved, and opening rebuilds every theme draft', () => {
+    expect(menu).toMatch(/draftThemeEdit = themeSelect\.value;\s*draftThemeChoice = themeSelect\.value;/);
+    expect(menu).toContain('draftThemes = copyThemes(current.themes)');
+    expect(menu).toContain('draftThemeChoice = current.themeChoice');
+    expect(menu).toContain('draftThemeMatch = current.themeMatch');
+    expect(menu).toContain('draftThemeRandom = current.themeRandom');
+    expect(menu).toContain('draftStyleRandom = current.styleRandom');
+    expect(fn('refresh')).toContain('showTheme()');
+  });
+  it('never stores random styles anywhere but the draft', () => {
+    expect([...menu.matchAll(/randomStyle\(/g)].length).toBe(1);
+  });
+  it('fits the dialog: one column, colour row, scaled preview', () => {
+    expect(css).toMatch(/\.color-row[^{]*\{[^}]*display:\s*flex/);
+    expect(css).toMatch(/\.theme-preview[^{]*\{[^}]*width:\s*100%/);
   });
 });

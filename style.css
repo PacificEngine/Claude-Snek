@@ -58,3 +58,12 @@ dialog h2 { margin: 0 0 0.5rem; }
 .reroll[hidden], .reset-custom[hidden] { display: none; }
 .dialog-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; position: sticky; bottom: 0; background: #fff; padding-top: 0.5rem; }
 .dialog-actions button { min-height: 48px; }
+
+.field select { width: 100%; box-sizing: border-box; min-height: 44px; font: inherit; }
+.color-row { display: flex; gap: 0.5rem; }
+.color-row input[type="color"] { flex: none; width: 56px; padding: 2px; }
+.color-row input[type="text"] { flex: 1 1 auto; min-width: 0; }
+.theme-note { margin: 0.4rem 0 0; font-size: 0.85rem; color: #52606d; }
+.theme-note:empty { display: none; }
+#difficulty-fields canvas.theme-preview { display: block; width: 100%; height: auto; aspect-ratio: 8 / 3; margin-top: 0.75rem; border-radius: 8px; box-shadow: none; }
+.theme-randomize, .theme-reset { width: 100%; min-height: 44px; margin-top: 0.4rem; font: inherit; }
